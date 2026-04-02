@@ -2,6 +2,71 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // TODO: WRITE ANY NECESSARY FIRESTORE RULES HERE
+
+    function isValidStatus(status) {
+      return status is string && (status == "draft" || status == "published");
+    }
+
+    function isValidArticle(data) {
+      return data is map
+
+        // Require these fields (schema enforcement)
+        && data.keys().hasAll([
+          "title",
+          "content",
+          "status",
+          "authorName",
+          "thumbnailPath",
+          "createdAt",
+          "updatedAt"
+        ])
+
+        // Optional fields allowed (prevent random extra fields if you want strictness)
+        // If you prefer allowing extras, remove the hasOnly(...) line.
+        
+
+        // Types
+        && data.title is string
+        && data.content is string
+        && isValidStatus(data.status)
+        && data.authorName is string
+        && data.thumbnailPath is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+
+        // Constraints
+        && data.title.size() >= 5
+        && data.title.size() <= 120
+        && data.thumbnailPath.matches('^media\\/articles\\/.+')
+
+        // Optional types (only validate if present)
+        && (!("subtitle" in data) || data.subtitle is string)
+        && (!("excerpt" in data) || data.excerpt is string)
+        && (!("tags" in data) || data.tags is list)
+        && (!("thumbnailUrl" in data) || data.thumbnailUrl is string)
+        && (!("readingTimeMinutes" in data) || data.readingTimeMinutes is number)
+        && (!("language" in data) || data.language is string)
+        && (!("source" in data) || data.source is string)
+        && (!("publishedAt" in data) || data.publishedAt is timestamp);
+    }
+
+    match /articles/{articleId} {
+      // Public read
+      allow get, list: if true;
+
+      // Public write but only if schema is valid
+      allow create: if isValidArticle(request.resource.data);
+
+      // Update must remain valid, and createdAt cannot change
+      allow update: if isValidArticle(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if true;
+    }
+
+    // Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
