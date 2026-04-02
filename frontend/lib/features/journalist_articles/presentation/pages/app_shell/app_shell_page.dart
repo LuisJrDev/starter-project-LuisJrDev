@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../add_article/add_article_page.dart';
-import '../my_articles/my_articles_page.dart';
+import '../profile/profile_page.dart';
 
 class AppShellPage extends StatefulWidget {
   const AppShellPage({super.key});
@@ -16,8 +16,7 @@ class _AppShellPageState extends State<AppShellPage> {
   final _pages = const <Widget>[
     _FeedPlaceholderPage(),
     AddArticlePage(),
-    MyArticlesPage(),
-    _SettingsPlaceholderPage(),
+    ProfilePage(),
   ];
 
   @override
@@ -39,14 +38,9 @@ class _AppShellPageState extends State<AppShellPage> {
             label: 'Create',
           ),
           NavigationDestination(
-            icon: Icon(Icons.library_books_outlined),
-            selectedIcon: Icon(Icons.library_books),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.tune_outlined),
-            selectedIcon: Icon(Icons.tune),
-            label: 'Settings',
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
           ),
         ],
       ),
@@ -64,23 +58,6 @@ class _FeedPlaceholderPage extends StatelessWidget {
       body: const Center(
         child: Text(
           'Next commit: TikTok-style vertical feed (published articles).',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsPlaceholderPage extends StatelessWidget {
-  const _SettingsPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: const Center(
-        child: Text(
-          'Next commits: Apple News reader settings.',
           textAlign: TextAlign.center,
         ),
       ),
