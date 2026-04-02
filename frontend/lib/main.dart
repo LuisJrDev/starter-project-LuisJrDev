@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'features/journalist_articles/presentation/pages/app_shell/app_shell_page.dart';
 import 'firebase_options.dart';
 
 import 'package:flutter/material.dart';
@@ -51,7 +52,7 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: theme(),
         onGenerateRoute: AppRoutes.onGenerateRoutes,
-        home: const DailyNews(),
+        home: const AppShellPage(),
       ),
     );
   }
