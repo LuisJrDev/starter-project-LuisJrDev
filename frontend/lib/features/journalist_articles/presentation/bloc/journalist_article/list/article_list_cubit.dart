@@ -1,23 +1,31 @@
-import 'package:bloc/bloc.dart';
-import 'package:news_app_clean_architecture/core/resources/data_state.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/usecases/get_articles.dart';
+// lib/features/journalist_articles/presentation/bloc/journalist_article/list/article_list_cubit.dart
+import 'dart:async';
 
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../domain/entities/journalist_article.dart';
+import '../../../../domain/usecases/watch_articles.dart';
 import 'article_list_state.dart';
 
 class ArticleListCubit extends Cubit<ArticleListState> {
-  final GetJournalistArticlesUseCase _getArticles;
+  final WatchJournalistArticlesUseCase _watchArticles;
+  StreamSubscription<List<JournalistArticleEntity>>? _sub;
 
-  ArticleListCubit(this._getArticles) : super(const ArticleListLoading());
+  ArticleListCubit(this._watchArticles) : super(const ArticleListLoading());
 
-  Future<void> load() async {
+  void start() {
     emit(const ArticleListLoading());
 
-    final state = await _getArticles();
-    if (state is DataSuccess && state.data != null) {
-      emit(ArticleListLoaded(state.data!));
-      return;
-    }
+    _sub?.cancel();
+    _sub = _watchArticles().listen(
+      (articles) => emit(ArticleListLoaded(articles)),
+      onError: (_) => emit(const ArticleListError('Failed to load articles')),
+    );
+  }
 
-    emit(const ArticleListError('Failed to load articles'));
+  @override
+  Future<void> close() async {
+    await _sub?.cancel();
+    return super.close();
   }
 }

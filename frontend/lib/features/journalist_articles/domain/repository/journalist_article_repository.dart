@@ -12,5 +12,19 @@ abstract class JournalistArticleRepository {
     required String contentType,
   });
 
+  Stream<List<JournalistArticleEntity>> watchPublishedArticles();
+
+  Stream<List<JournalistArticleEntity>> watchArticles();
+
   Future<DataState<void>> createArticle(JournalistArticleEntity article);
+
+  Future<DataState<void>> updateArticle(JournalistArticleEntity article);
+
+  Future<DataState<void>> deleteArticle(
+    String articleId, {
+    required String thumbnailPath,
+  });
+
+  Future<DataState<void>> publishArticle(String articleId);
+  Future<DataState<List<JournalistArticleEntity>>> getPublishedArticles();
 }

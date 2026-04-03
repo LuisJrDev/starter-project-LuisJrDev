@@ -5,6 +5,9 @@ import 'package:news_app_clean_architecture/features/daily_news/data/repository/
 import 'package:news_app_clean_architecture/features/daily_news/domain/repository/article_repository.dart';
 import 'package:news_app_clean_architecture/features/daily_news/domain/usecases/get_article.dart';
 import 'package:news_app_clean_architecture/features/daily_news/presentation/bloc/article/remote/remote_article_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import 'core/device/device_id_service.dart';
 import 'features/daily_news/data/data_sources/local/app_database.dart';
 import 'features/daily_news/domain/usecases/get_saved_article.dart';
 import 'features/daily_news/domain/usecases/remove_article.dart';
@@ -18,14 +21,23 @@ import 'features/journalist_articles/data/data_sources/remote/journalist_storage
 import 'features/journalist_articles/data/repository/journalist_article_repository_impl.dart';
 import 'features/journalist_articles/domain/repository/journalist_article_repository.dart';
 import 'features/journalist_articles/domain/usecases/create_article.dart';
+import 'features/journalist_articles/domain/usecases/delete_article.dart';
 import 'features/journalist_articles/domain/usecases/get_articles.dart';
+import 'features/journalist_articles/domain/usecases/get_published_articles.dart';
+import 'features/journalist_articles/domain/usecases/publish_article.dart';
+import 'features/journalist_articles/domain/usecases/update_article.dart';
 import 'features/journalist_articles/domain/usecases/upload_thumbnail.dart';
+import 'features/journalist_articles/domain/usecases/watch_articles.dart';
+import 'features/journalist_articles/domain/usecases/watch_published_articles.dart';
 import 'features/journalist_articles/presentation/bloc/journalist_article/create/create_article_cubit.dart';
 import 'features/journalist_articles/presentation/bloc/journalist_article/list/article_list_cubit.dart';
+import 'features/journalist_articles/presentation/bloc/journalist_article/list/published_article_list_cubit.dart';
 
 final sl = GetIt.instance;
 
 Future<void> initializeDependencies() async {
+  final prefs = await SharedPreferences.getInstance();
+
   final database = await $FloorAppDatabase
       .databaseBuilder('app_database.db')
       .build();
@@ -83,9 +95,34 @@ Future<void> initializeDependencies() async {
     CreateJournalistArticleUseCase(sl()),
   );
 
+  sl.registerLazySingleton(() => DeleteJournalistArticleUseCase(sl()));
+
   // Journalist feature - cubits
-  sl.registerFactory<CreateArticleCubit>(
-    () => CreateArticleCubit(sl(), sl(), sl()),
-  );
+  sl.registerLazySingleton(() => UpdateJournalistArticleUseCase(sl()));
+  sl.registerFactory(() => CreateArticleCubit(sl(), sl(), sl(), sl()));
   sl.registerFactory<ArticleListCubit>(() => ArticleListCubit(sl()));
+
+  sl.registerSingleton<GetPublishedJournalistArticlesUseCase>(
+    GetPublishedJournalistArticlesUseCase(sl()),
+  );
+
+  sl.registerSingleton<PublishJournalistArticleUseCase>(
+    PublishJournalistArticleUseCase(sl()),
+  );
+
+  sl.registerFactory<PublishedArticleListCubit>(
+    () => PublishedArticleListCubit(sl()),
+  );
+
+  sl.registerSingleton<WatchPublishedJournalistArticlesUseCase>(
+    WatchPublishedJournalistArticlesUseCase(sl()),
+  );
+
+  sl.registerSingleton<WatchJournalistArticlesUseCase>(
+    WatchJournalistArticlesUseCase(sl()),
+  );
+
+  sl.registerSingleton<SharedPreferences>(prefs);
+  sl.registerSingleton<Uuid>(const Uuid());
+  sl.registerSingleton<DeviceIdService>(DeviceIdService(sl(), sl()));
 }

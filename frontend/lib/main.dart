@@ -41,6 +41,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: theme(),
+      darkTheme: darkTheme(),
+      themeMode: ThemeMode
+          .dark, // <--- para que se vea moderno y consistente con tu feed
       onGenerateRoute: AppRoutes.onGenerateRoutes,
       home: const AppShellPage(),
     );

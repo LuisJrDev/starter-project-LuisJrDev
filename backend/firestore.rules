@@ -9,23 +9,19 @@ service cloud.firestore {
 
     function isValidArticle(data) {
       return data is map
-
-        // Require these fields (schema enforcement)
         && data.keys().hasAll([
           "title",
           "content",
           "status",
           "authorName",
           "thumbnailPath",
+          "category",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "likeCount",
+          "commentCount"
         ])
 
-        // Optional fields allowed (prevent random extra fields if you want strictness)
-        // If you prefer allowing extras, remove the hasOnly(...) line.
-        
-
-        // Types
         && data.title is string
         && data.content is string
         && isValidStatus(data.status)
@@ -33,38 +29,70 @@ service cloud.firestore {
         && data.thumbnailPath is string
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
+        && data.category is string
+        && data.category in ["General","Sports","Technology","Business","Health","Entertainment","Politics"]
+        && data.likeCount is number
+        && data.commentCount is number
+        && data.likeCount >= 0
+        && data.commentCount >= 0
 
-        // Constraints
         && data.title.size() >= 5
         && data.title.size() <= 120
         && data.thumbnailPath.matches('^media\\/articles\\/.+')
 
-        // Optional types (only validate if present)
-        && (!("subtitle" in data) || data.subtitle is string)
-        && (!("excerpt" in data) || data.excerpt is string)
-        && (!("tags" in data) || data.tags is list)
-        && (!("thumbnailUrl" in data) || data.thumbnailUrl is string)
-        && (!("readingTimeMinutes" in data) || data.readingTimeMinutes is number)
-        && (!("language" in data) || data.language is string)
-        && (!("source" in data) || data.source is string)
         && (!("publishedAt" in data) || data.publishedAt is timestamp);
     }
 
+    function isLikeCountUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(["likeCount", "updatedAt"])
+        && request.resource.data.likeCount is number
+        && request.resource.data.likeCount >= 0
+        && request.resource.data.updatedAt is timestamp;
+    }
+    
     match /articles/{articleId} {
       // Public read
       allow get, list: if true;
 
-      // Public write but only if schema is valid
+      // Public create/update (MVP)
       allow create: if isValidArticle(request.resource.data);
+      allow update: if (
+        isValidArticle(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt
+      ) || isLikeCountUpdate();
 
-      // Update must remain valid, and createdAt cannot change
-      allow update: if isValidArticle(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt;
-
+      // ⚠️ inseguro en prod, pero lo dejo como lo tenías
       allow delete: if true;
+
+      // Likes
+      match /reactions/{deviceId} {
+        allow read: if true;
+
+        allow create: if request.resource.data.keys().hasOnly(["type", "createdAt"])
+          && request.resource.data.type == "like"
+          && request.resource.data.createdAt is timestamp;
+
+        allow delete: if true;
+        allow update: if false;
+      }
+
+      // Comments
+      match /comments/{commentId} {
+        allow read: if true;
+
+        allow create: if request.resource.data.keys().hasOnly(["deviceId","authorName","text","createdAt"])
+          && request.resource.data.deviceId is string
+          && request.resource.data.authorName is string
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt is timestamp;
+
+        allow delete: if true;
+        allow update: if false;
+      }
     }
 
-    // Default deny everything else
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

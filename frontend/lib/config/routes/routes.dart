@@ -5,7 +5,6 @@ import '../../features/daily_news/presentation/pages/article_detail/article_deta
 import '../../features/daily_news/presentation/pages/home/daily_news.dart';
 import '../../features/daily_news/presentation/pages/saved_article/saved_article.dart';
 import '../../features/journalist_articles/presentation/pages/add_article/add_article_page.dart';
-import '../../features/journalist_articles/presentation/pages/my_articles/my_articles_page.dart';
 
 class AppRoutes {
   static Route onGenerateRoutes(RouteSettings settings) {
@@ -15,9 +14,6 @@ class AppRoutes {
 
       case '/AddArticle':
         return _materialRoute(const AddArticlePage());
-
-      case '/MyArticles':
-        return _materialRoute(const MyArticlesPage());
 
       case '/ArticleDetails':
         return _materialRoute(

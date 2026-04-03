@@ -6,11 +6,15 @@ class JournalistArticleModel extends JournalistArticleEntity {
     required super.id,
     required super.title,
     required super.content,
+    required super.category,
     required super.status,
     required super.authorName,
     required super.thumbnailPath,
+    required super.publishedAt,
     required super.createdAt,
     required super.updatedAt,
+    super.likeCount = 0,
+    super.commentCount = 0,
   });
 
   factory JournalistArticleModel.fromFirestore(
@@ -24,8 +28,12 @@ class JournalistArticleModel extends JournalistArticleEntity {
       status: (data['status'] as String?) ?? 'draft',
       authorName: (data['authorName'] as String?) ?? '',
       thumbnailPath: (data['thumbnailPath'] as String?) ?? '',
+      category: (data['category'] as String?) ?? 'General',
+      publishedAt: (data['publishedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      likeCount: ((data['likeCount'] as num?) ?? 0).toInt(),
+      commentCount: ((data['commentCount'] as num?) ?? 0).toInt(),
     );
   }
 
@@ -36,8 +44,13 @@ class JournalistArticleModel extends JournalistArticleEntity {
       'status': status,
       'authorName': authorName,
       'thumbnailPath': thumbnailPath,
+      if (publishedAt != null) 'publishedAt': Timestamp.fromDate(publishedAt!),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'category': category,
+      // NEW
+      'likeCount': likeCount,
+      'commentCount': commentCount,
     };
   }
 }

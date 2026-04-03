@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+import '../../controllers/saved_articles_controller.dart';
+import '../../widgets/my_articles_section.dart';
 
+class ProfilePage extends StatelessWidget {
+  final int initialTabIndex;
+
+  final SavedArticlesController saved;
+
+  const ProfilePage({super.key, this.initialTabIndex = 0, required this.saved});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -11,50 +17,43 @@ class ProfilePage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              // Next commit: Settings page (Reader mode, etc.)
-            },
+            onPressed: () {},
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          Row(
-            children: [
-              const CircleAvatar(radius: 28, child: Icon(Icons.person)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Juan', style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Journalist • Drafts & Published articles',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const CircleAvatar(radius: 28, child: Icon(Icons.person)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Juan',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Journalist • Drafts & Published articles',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.article_outlined),
-            title: const Text('My Articles'),
-            subtitle: const Text('Drafts & Published'),
-            onTap: () {
-              // Puedes navegar a MyArticlesPage si lo mantienes como pantalla separada.
-              // O en el futuro, renderizar MyArticles dentro del profile.
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.bookmark_outline),
-            title: const Text('Bookmarks'),
-            subtitle: const Text('Coming soon'),
-            onTap: () {},
+          const Divider(height: 1),
+          Expanded(
+            child: MyArticlesSection(
+              initialTabIndex: initialTabIndex,
+              saved: saved,
+            ),
           ),
         ],
       ),
