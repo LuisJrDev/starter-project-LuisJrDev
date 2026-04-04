@@ -10,7 +10,6 @@ class SavedArticlePreview {
   final String category;
   final int? createdAtMillis;
 
-  // NUEVO:
   final String content;
 
   SavedArticlePreview({
@@ -71,7 +70,6 @@ class SavedArticlesLocalStore {
     if (idx >= 0) {
       all.removeAt(idx);
     } else {
-      // insert al inicio
       all.insert(0, preview);
     }
 

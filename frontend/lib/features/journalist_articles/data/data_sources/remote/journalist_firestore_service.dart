@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../domain/entities/journalist_article.dart';
 import '../../models/journalist_article.dart';
@@ -55,10 +54,6 @@ class JournalistFirestoreService {
 
   Future<void> deleteArticle(String articleId) async {
     await _articles.doc(articleId).delete();
-  }
-
-  Future<void> deleteByPath(String path) async {
-    await FirebaseStorage.instance.ref(path).delete();
   }
 
   DocumentReference<Map<String, dynamic>> _articleDoc(String articleId) =>

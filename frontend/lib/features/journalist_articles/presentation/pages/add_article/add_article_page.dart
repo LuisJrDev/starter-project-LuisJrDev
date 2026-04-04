@@ -7,7 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/constants/article_categories.dart';
-import '../../../../../injection_container.dart';
+import '../../../../../core/widgets/app_loading_overlay.dart';
+import '../../../../../core/widgets/app_toast.dart';
 import '../../../domain/entities/journalist_article.dart';
 import '../../bloc/journalist_article/create/create_article_cubit.dart';
 import '../../bloc/journalist_article/create/create_article_state.dart';
@@ -53,13 +54,10 @@ class _AddArticlePageState extends State<AddArticlePage> {
   final _formKey = GlobalKey<FormState>();
 
   Future<void> _loadAuthorFromLoggedUser() async {
-    // Si estás editando un artículo, respeta el autor existente
     if (widget.editArticle != null) return;
 
     final user = FirebaseAuth.instance.currentUser;
-
-    // 1) fallback rápido
-    final fallback = user?.displayName ?? user?.email ?? 'Unknown';
+    final fallback = user?.displayName ?? user?.email ?? 'Usuario';
 
     if (user == null) {
       _authorController.text = fallback;
@@ -125,6 +123,7 @@ class _AddArticlePageState extends State<AddArticlePage> {
     setState(() {
       _thumbnailBytes = null;
       _thumbnailContentType = null;
+      _category = 'General';
     });
   }
 
@@ -132,9 +131,7 @@ class _AddArticlePageState extends State<AddArticlePage> {
     final valid = _formKey.currentState?.validate() ?? false;
 
     if (!valid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fix the highlighted fields')),
-      );
+      AppToast.showError(context, 'Por favor, corrige los campos resaltados.');
       return false;
     }
 
@@ -144,19 +141,13 @@ class _AddArticlePageState extends State<AddArticlePage> {
     final hasNewThumb =
         _thumbnailBytes != null && _thumbnailContentType != null;
 
-    // Create: obligar thumbnail nuevo
     if (!editing && !hasNewThumb) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Pick a thumbnail')));
+      AppToast.showError(context, 'Selecciona una miniatura.');
       return false;
     }
 
-    // Edit: permitir thumb existente o nuevo
     if (editing && !(hasExistingThumb || hasNewThumb)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Pick a thumbnail')));
+      AppToast.showError(context, 'Selecciona una miniatura.');
       return false;
     }
 
@@ -180,14 +171,13 @@ class _AddArticlePageState extends State<AddArticlePage> {
         existing: widget.editArticle!,
         title: title,
         content: content,
-        thumbnailBytes: _thumbnailBytes, // puede ser null si mantiene imagen
-        thumbnailContentType: _thumbnailContentType, // puede ser null
+        thumbnailBytes: _thumbnailBytes,
+        thumbnailContentType: _thumbnailContentType,
         publishNow: publishNow,
       );
       return;
     }
 
-    // Create (igual que antes)
     context.read<CreateArticleCubit>().submit(
       title: title,
       content: content,
@@ -220,9 +210,7 @@ class _AddArticlePageState extends State<AddArticlePage> {
     final sel = c.selection;
 
     if (!sel.isValid || sel.isCollapsed) {
-      // si no hay selección, inserta placeholder
       _insertIntoContent('$left$textPlaceholder$right');
-      // mueve cursor para seleccionar "text"
       final idx = c.text.indexOf(textPlaceholder);
       if (idx >= 0) {
         c.selection = TextSelection(
@@ -248,7 +236,7 @@ class _AddArticlePageState extends State<AddArticlePage> {
     );
   }
 
-  static const textPlaceholder = 'text';
+  static const textPlaceholder = 'texto';
 
   double _completionProgress() {
     int done = 0;
@@ -277,7 +265,7 @@ class _AddArticlePageState extends State<AddArticlePage> {
       _contentController.text = a.content;
       _category = a.category;
     } else {
-      _loadAuthorFromLoggedUser(); // <-- NUEVO
+      _loadAuthorFromLoggedUser();
     }
 
     _titleController.addListener(() => setState(() {}));
@@ -298,236 +286,223 @@ class _AddArticlePageState extends State<AddArticlePage> {
     final scheme = Theme.of(context).colorScheme;
     final editing = widget.editArticle != null;
 
-    return BlocProvider(
-      create: (_) => sl<CreateArticleCubit>(),
+    return BlocListener<CreateArticleCubit, CreateArticleState>(
+      listener: (context, state) {
+        if (!context.mounted) return;
+
+        if (state is CreateArticleLoading) {
+          AppLoadingOverlay.show(
+            context,
+            message: editing ? 'Guardando cambios…' : 'Creando artículo…',
+          );
+          return;
+        }
+
+        // cualquier estado distinto a loading
+        AppLoadingOverlay.hide(context);
+
+        if (state is CreateArticleError) {
+          AppToast.showError(context, state.message);
+          _pendingResult = null;
+          return;
+        }
+
+        if (state is CreateArticleSuccess) {
+          final result = _pendingResult ?? AddArticleResult.draftSaved;
+
+          AppToast.showSuccess(
+            context,
+            result == AddArticleResult.published
+                ? 'Artículo publicado'
+                : 'Borrador guardado',
+          );
+
+          _pendingResult = null;
+
+          if (editing) {
+            Navigator.of(context).pop(result);
+            return;
+          }
+
+          _resetForm();
+          widget.onResult?.call(result);
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.editArticle == null ? 'Create' : 'Edit draft'),
+          title: Text(editing ? 'Editar borrador' : 'Crear artículo'),
         ),
-        body: BlocConsumer<CreateArticleCubit, CreateArticleState>(
-          listener: (context, state) {
-            if (state is CreateArticleSuccess) {
-              final result = _pendingResult ?? AddArticleResult.draftSaved;
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    result == AddArticleResult.published
-                        ? 'Article published'
-                        : 'Draft saved',
-                  ),
-                ),
-              );
-
-              final editing = widget.editArticle != null;
-
-              _pendingResult = null;
-
-              if (editing) {
-                // En edición: vuelve atrás (listado de drafts/published)
-                Navigator.of(context).pop(result);
-                return;
-              }
-
-              // En create: limpia y notifica
-              _resetForm();
-              widget.onResult?.call(result);
-            }
-
-            if (state is CreateArticleError) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(state.message)));
-            }
-          },
+        body: BlocBuilder<CreateArticleCubit, CreateArticleState>(
           builder: (context, state) {
             final loading = state is CreateArticleLoading;
             final progress = _completionProgress();
 
-            return Stack(
-              children: [
-                AbsorbPointer(
-                  absorbing: loading,
-                  child: Form(
-                    key: _formKey,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                      children: [
-                        _CreateHeader(progress: progress),
-                        const SizedBox(height: 14),
-
-                        // MEDIA
-                        _SectionCard(
-                          title: 'Media',
-                          subtitle: 'Thumbnail (16:9)',
-                          child: _ThumbnailPickerModern(
-                            bytes: _thumbnailBytes,
-                            existingUrlFuture:
-                                (widget.editArticle != null &&
-                                    _thumbnailBytes == null)
-                                ? widget.thumbnailUrlFuture
-                                : null,
-                            onPick: _pickThumbnail,
-                            onRemove: (_thumbnailBytes == null)
-                                ? null
-                                : _removeThumbnail,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // DETAILS
-                        _SectionCard(
-                          title: 'Details',
-                          subtitle: 'How it will appear in the feed',
-                          child: Column(
-                            children: [
-                              TextFormField(
-                                controller: _titleController,
-                                maxLength: 120,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: 'Title',
-                                  hintText: 'Catchy, short and clear…',
-                                ),
-                                validator: (v) {
-                                  final value = (v ?? '').trim();
-                                  if (value.length < 5)
-                                    return 'Title too short';
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              if (editing) ...[
-                                TextFormField(
-                                  controller: _authorController,
-                                  readOnly: true,
-                                  maxLength: 40,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Author',
-                                    hintText: 'Public name',
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                              DropdownButtonFormField<String>(
-                                value: _category,
-                                decoration: const InputDecoration(
-                                  labelText: 'Category',
-                                ),
-                                items: kArticleCategories
-                                    .map(
-                                      (c) => DropdownMenuItem(
-                                        value: c,
-                                        child: Text(c),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) =>
-                                    setState(() => _category = v ?? 'General'),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // STORY
-                        _SectionCard(
-                          title: 'Story',
-                          subtitle: 'Write the full article',
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _MarkdownToolbar(
-                                onBold: () => _wrapSelectionInContent(
-                                  left: '**',
-                                  right: '**',
-                                ),
-                                onH2: () =>
-                                    _insertIntoContent('\n## Subtitle\n'),
-                                onBullets: () => _insertIntoContent(
-                                  '\n- Item 1\n- Item 2\n',
-                                ),
-                                onQuote: () =>
-                                    _insertIntoContent('\n> Quote\n'),
-                                onCode: () => _wrapSelectionInContent(
-                                  left: '`',
-                                  right: '`',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _contentController,
-                                maxLength: 10000,
-                                minLines: 10,
-                                maxLines: 18,
-                                textInputAction: TextInputAction.newline,
-                                decoration: const InputDecoration(
-                                  labelText: 'Content (Markdown)',
-                                  hintText:
-                                      'Use **bold**, ## subtitles, - lists…',
-                                  alignLabelWithHint: true,
-                                ),
-                                validator: (v) {
-                                  final value = (v ?? '').trim();
-                                  if (value.length < 20) {
-                                    return 'Content too short (min 20 chars)';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // preview (mini)
-                        _MiniFeedPreview(
-                          title: _titleController.text.trim(),
-                          author: _authorController.text.trim(),
-                          hasImage:
-                              _thumbnailBytes != null ||
-                              (widget.editArticle?.thumbnailPath.isNotEmpty ??
-                                  false),
-                        ),
-
-                        const SizedBox(height: 20),
-                        Text(
-                          'Tip: Save draft while you write, publish when ready.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
+            return AbsorbPointer(
+              absorbing: loading,
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  children: [
+                    _CreateHeader(
+                      title: editing ? 'Editar borrador' : 'Crear artículo',
+                      progress: progress,
                     ),
-                  ),
-                ),
-
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                      child: _BottomActionBarModern(
-                        loading: loading,
-                        progress: progress,
-                        editing: editing, // <-- nuevo
-                        onSaveDraft: () =>
-                            _submit(context: context, publishNow: false),
-                        onPublish: () =>
-                            _submit(context: context, publishNow: true),
+                    const SizedBox(height: 14),
+                    _SectionCard(
+                      title: 'Imagen',
+                      subtitle: 'Portada (16:9)',
+                      child: _ThumbnailPickerModern(
+                        bytes: _thumbnailBytes,
+                        existingUrlFuture:
+                            (widget.editArticle != null &&
+                                _thumbnailBytes == null)
+                            ? widget.thumbnailUrlFuture
+                            : null,
+                        onPick: _pickThumbnail,
+                        onRemove: (_thumbnailBytes == null)
+                            ? null
+                            : _removeThumbnail,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    _SectionCard(
+                      title: 'Detalles',
+                      subtitle: 'Título, autor y categoría',
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _titleController,
+                            maxLength: 120,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Título',
+                              hintText: 'Ingresa el título del artículo',
+                            ),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.length < 5) {
+                                return 'Título muy corto (mínimo 5 caracteres)';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          if (editing) ...[
+                            TextFormField(
+                              controller: _authorController,
+                              readOnly: true,
+                              maxLength: 40,
+                              decoration: const InputDecoration(
+                                labelText: 'Autor',
+                                hintText: 'Nombre público',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          DropdownButtonFormField<String>(
+                            value: _category,
+                            decoration: const InputDecoration(
+                              labelText: 'Categoría',
+                            ),
+                            items: kArticleCategories
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _category = v ?? 'General'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _SectionCard(
+                      title: 'Contenido',
+                      subtitle: 'Escribe el artículo completo',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _MarkdownToolbar(
+                            onBold: () => _wrapSelectionInContent(
+                              left: '**',
+                              right: '**',
+                            ),
+                            onH2: () => _insertIntoContent('\n## Subtítulo\n'),
+                            onBullets: () =>
+                                _insertIntoContent('\n- Ítem 1\n- Ítem 2\n'),
+                            onQuote: () => _insertIntoContent('\n> Cita\n'),
+                            onCode: () =>
+                                _wrapSelectionInContent(left: '`', right: '`'),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _contentController,
+                            maxLength: 10000,
+                            minLines: 10,
+                            maxLines: 18,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              labelText: 'Contenido (Markdown)',
+                              hintText:
+                                  'Usa **negrita**, ## subtítulos, - listas…',
+                              alignLabelWithHint: true,
+                            ),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.length < 20) {
+                                return 'Contenido muy corto (mínimo 20 caracteres)';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _MiniFeedPreview(
+                      title: _titleController.text.trim(),
+                      author: _authorController.text.trim(),
+                      hasImage:
+                          _thumbnailBytes != null ||
+                          (widget.editArticle?.thumbnailPath.isNotEmpty ??
+                              false),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Tu artículo se verá así en el feed',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
-                if (loading)
-                  _PublishingOverlay(
-                    text: (_pendingResult == AddArticleResult.published)
-                        ? 'Publishing…'
-                        : 'Saving draft…',
-                  ),
-              ],
+              ),
             );
           },
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: BlocBuilder<CreateArticleCubit, CreateArticleState>(
+              builder: (context, state) {
+                final loading = state is CreateArticleLoading;
+                final progress = _completionProgress();
+
+                return _BottomActionBarModern(
+                  loading: loading,
+                  progress: progress,
+                  editing: editing,
+                  onSaveDraft: () =>
+                      _submit(context: context, publishNow: false),
+                  onPublish: () => _submit(context: context, publishNow: true),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -535,9 +510,10 @@ class _AddArticlePageState extends State<AddArticlePage> {
 }
 
 class _CreateHeader extends StatelessWidget {
+  final String title;
   final double progress;
 
-  const _CreateHeader({required this.progress});
+  const _CreateHeader({required this.title, required this.progress});
 
   @override
   Widget build(BuildContext context) {
@@ -551,14 +527,14 @@ class _CreateHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Create article',
+              title,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
-              'Add a thumbnail, title, author, category and content.',
+              'Añade una miniatura, título, autor, categoría y contenido.',
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -621,7 +597,7 @@ class _SectionCard extends StatelessWidget {
 
 class _ThumbnailPickerModern extends StatelessWidget {
   final Uint8List? bytes;
-  final Future<String>? existingUrlFuture; // NUEVO
+  final Future<String>? existingUrlFuture;
   final VoidCallback onPick;
   final VoidCallback? onRemove;
 
@@ -678,13 +654,12 @@ class _ThumbnailPickerModern extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Pick thumbnail',
+                          'Seleccionar miniatura',
                           style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
-
                 Positioned(
                   top: 10,
                   right: 10,
@@ -698,8 +673,8 @@ class _ThumbnailPickerModern extends StatelessWidget {
                         ),
                         label: Text(
                           (bytes == null && existingUrlFuture == null)
-                              ? 'Pick'
-                              : 'Change',
+                              ? 'Seleccionar'
+                              : 'Cambiar',
                         ),
                       ),
                       if (onRemove != null) ...[
@@ -724,14 +699,14 @@ class _ThumbnailPickerModern extends StatelessWidget {
 class _BottomActionBarModern extends StatelessWidget {
   final bool loading;
   final double progress;
-  final bool editing; // <-- nuevo
+  final bool editing;
   final VoidCallback onSaveDraft;
   final VoidCallback onPublish;
 
   const _BottomActionBarModern({
     required this.loading,
     required this.progress,
-    required this.editing, // <-- nuevo
+    required this.editing,
     required this.onSaveDraft,
     required this.onPublish,
   });
@@ -750,7 +725,9 @@ class _BottomActionBarModern extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: loading ? null : onSaveDraft,
                 icon: const Icon(Icons.save_outlined),
-                label: Text(editing ? 'Update draft' : 'Save draft'),
+                label: Text(
+                  editing ? 'Actualizar borrador' : 'Guardar borrador',
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -759,16 +736,13 @@ class _BottomActionBarModern extends StatelessWidget {
                 onPressed: loading
                     ? null
                     : () {
-                        // Si falta algo, dispara validación visible
                         if (!ready) {
                           FocusManager.instance.primaryFocus?.unfocus();
                         }
                         onPublish();
                       },
                 icon: const Icon(Icons.publish_outlined),
-                label: Text(
-                  editing ? 'Publish' : (ready ? 'Publish' : 'Complete'),
-                ),
+                label: const Text('Publicar'),
               ),
             ),
           ],
@@ -792,8 +766,8 @@ class _MiniFeedPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final t = title.isEmpty ? 'Your title will appear here' : title;
-    final a = author.isEmpty ? 'author' : author;
+    final t = title.isEmpty ? 'Tu título aparecerá aquí' : title;
+    final a = author.isEmpty ? 'autor' : author;
 
     return Card(
       elevation: 0,
@@ -843,52 +817,6 @@ class _MiniFeedPreview extends StatelessWidget {
   }
 }
 
-class _PublishingOverlay extends StatelessWidget {
-  final String text;
-
-  const _PublishingOverlay({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: AbsorbPointer(
-        absorbing: true,
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.55),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111113),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MarkdownToolbar extends StatelessWidget {
   final VoidCallback onBold;
   final VoidCallback onH2;
@@ -914,9 +842,9 @@ class _MarkdownToolbar extends StatelessWidget {
           const SizedBox(width: 8),
           _ToolChip(label: 'H2', onTap: onH2),
           const SizedBox(width: 8),
-          _ToolChip(label: '• List', onTap: onBullets),
+          _ToolChip(label: '• Lista', onTap: onBullets),
           const SizedBox(width: 8),
-          _ToolChip(label: 'Quote', onTap: onQuote),
+          _ToolChip(label: 'Cita', onTap: onQuote),
           const SizedBox(width: 8),
           _ToolChip(label: '</>', onTap: onCode),
         ],

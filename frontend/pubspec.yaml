@@ -1,4 +1,4 @@
-name: news_app_clean_architecture
+name: symmetry_news
 description: A new Flutter project.
 
 publish_to: 'none'
@@ -68,7 +68,13 @@ dev_dependencies:
   retrofit_generator: ^8.2.1
   floor_generator: ^1.5.0
   build_runner: ^2.4.13
-  
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "assets/icons/app_icon.png"
+
 
 flutter:
 
@@ -76,7 +82,7 @@ flutter:
 
   assets:
     - assets/images/example.jpg
- 
+    - assets/icons/app_icon.png
   fonts:
     - family: Muli
       fonts:

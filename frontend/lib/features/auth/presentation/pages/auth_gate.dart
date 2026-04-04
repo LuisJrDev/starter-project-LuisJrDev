@@ -23,7 +23,6 @@ class AuthGate extends StatelessWidget {
           return const AppShellPage();
         }
 
-        // Unauthenticated / error -> login
         return const SignInPage();
       },
     );

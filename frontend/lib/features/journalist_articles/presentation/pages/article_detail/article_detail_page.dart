@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/resources/data_state.dart';
 import '../../../../../core/utils/time_ago.dart';
+import '../../../../../core/widgets/app_loading_overlay.dart';
+import '../../../../../core/widgets/app_toast.dart';
 import '../../../../../injection_container.dart';
 import '../../../data/data_sources/local/saved_articles_local_store.dart';
 import '../../../domain/entities/journalist_article.dart';
@@ -33,6 +35,7 @@ class ArticleDetailPage extends StatefulWidget {
 class _ArticleDetailPageState extends State<ArticleDetailPage> {
   final _scroll = ScrollController();
   double _progress = 0;
+  bool _deleting = false;
 
   ReaderSettings _settings = const ReaderSettings(
     fontScale: 1.0,
@@ -63,7 +66,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final words = text.trim().isEmpty
         ? 0
         : text.trim().split(RegExp(r'\s+')).length;
-    // 200 wpm aprox.
     return math.max(1, (words / 200).ceil());
   }
 
@@ -99,6 +101,77 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     );
   }
 
+  Future<void> _toggleSaved(bool savedNow) async {
+    try {
+      await widget.saved.toggle(_preview());
+      if (!mounted) return;
+
+      AppToast.showSuccess(
+        context,
+        savedNow ? 'Quitado de guardados' : 'Guardado para después',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo actualizar Guardados.');
+    }
+  }
+
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar artículo?'),
+        content: const Text('Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _deleteArticle() async {
+    if (_deleting) return;
+
+    final ok = await _confirmDelete(context);
+    if (!ok || !mounted) return;
+
+    _deleting = true;
+    AppLoadingOverlay.show(context, message: 'Eliminando…');
+
+    try {
+      final useCase = sl<DeleteJournalistArticleUseCase>();
+      final res = await useCase(
+        params: DeleteArticleParams(
+          articleId: widget.article.id,
+          thumbnailPath: widget.article.thumbnailPath,
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (res is DataSuccess) {
+        AppToast.showSuccess(context, 'Artículo eliminado');
+        Navigator.of(context).pop('deleted');
+      } else {
+        AppToast.showError(context, 'No se pudo eliminar. Intenta nuevamente.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo eliminar. Intenta nuevamente.');
+    } finally {
+      if (mounted) AppLoadingOverlay.hide(context);
+      _deleting = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final created = widget.article.publishedAt ?? widget.article.createdAt;
@@ -109,7 +182,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final canDelete = uid != null && uid == widget.article.authorId;
 
     return Theme(
-      // Tema local para modo lectura
       data: Theme.of(context).copyWith(
         scaffoldBackgroundColor: bg,
         colorScheme: Theme.of(
@@ -129,7 +201,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                   foregroundColor: fg,
                   actions: [
                     IconButton(
-                      tooltip: 'Reader settings',
+                      tooltip: 'Ajustes de lectura',
                       icon: const Icon(Icons.tune),
                       onPressed: () async {
                         final next = await showReaderSettingsSheet(
@@ -150,77 +222,20 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
                         return IconButton(
                           tooltip: savedNow
-                              ? 'Remove bookmark'
-                              : 'Save to read later',
+                              ? 'Quitar guardado'
+                              : 'Guardar para después',
                           icon: Icon(
                             savedNow ? Icons.bookmark : Icons.bookmark_border,
                           ),
-                          onPressed: () async {
-                            await widget.saved.toggle(_preview());
-
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  savedNow
-                                      ? 'Removed from Saved'
-                                      : 'Saved for later',
-                                ),
-                                duration: const Duration(milliseconds: 900),
-                              ),
-                            );
-                          },
+                          onPressed: () => _toggleSaved(savedNow),
                         );
                       },
                     ),
                     if (canDelete)
                       IconButton(
-                        tooltip: 'Delete',
+                        tooltip: 'Eliminar',
                         icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Delete article?'),
-                              content: const Text(
-                                'This action cannot be undone.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
-                          );
-
-                          if (ok != true || !context.mounted) return;
-
-                          final useCase = sl<DeleteJournalistArticleUseCase>();
-                          final res = await useCase(
-                            params: DeleteArticleParams(
-                              articleId: widget.article.id,
-                              thumbnailPath: widget.article.thumbnailPath,
-                            ),
-                          );
-
-                          if (!context.mounted) return;
-
-                          if (res is DataSuccess) {
-                            Navigator.of(context).pop('deleted');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Article deleted')),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Failed to delete')),
-                            );
-                          }
-                        },
+                        onPressed: _deleteArticle,
                       ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
@@ -348,8 +363,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 ),
               ],
             ),
-
-            // Progress bar (premium touch)
             Positioned(
               top: MediaQuery.of(context).padding.top,
               left: 0,

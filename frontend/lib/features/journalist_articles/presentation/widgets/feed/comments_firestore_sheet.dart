@@ -2,19 +2,26 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../data/data_sources/remote/journalist_firestore_service.dart';
+import '../../../../../core/widgets/app_loading_overlay.dart';
+import '../../../../../core/widgets/app_toast.dart';
 import '../../../domain/entities/journalist_article.dart';
+import '../../../domain/usecases/add_comment.dart';
+import '../../../domain/usecases/watch_comments.dart';
 
 class CommentsFirestoreSheet extends StatefulWidget {
   final JournalistArticleEntity article;
-  final JournalistFirestoreService firestore;
+
+  final WatchCommentsUseCase watchComments;
+  final AddCommentUseCase addComment;
+
   final String deviceId;
   final VoidCallback? onCommentSent;
 
   const CommentsFirestoreSheet({
     super.key,
     required this.article,
-    required this.firestore,
+    required this.watchComments,
+    required this.addComment,
     required this.deviceId,
     this.onCommentSent,
   });
@@ -25,9 +32,10 @@ class CommentsFirestoreSheet extends StatefulWidget {
 
 class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
   final _controller = TextEditingController();
+  bool _sending = false;
 
   Future<String> _resolveAuthorName(User user) async {
-    final fallback = user.displayName ?? user.email ?? 'User';
+    final fallback = user.displayName ?? user.email ?? 'Usuario';
 
     try {
       final snap = await FirebaseFirestore.instance
@@ -49,31 +57,54 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
   }
 
   Future<void> _send() async {
+    if (_sending) return;
+
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to comment')),
-      );
+      AppToast.showError(context, 'Inicia sesión para comentar.');
       return;
     }
 
-    final uid = user.uid;
-    final authorName = await _resolveAuthorName(user);
+    _sending = true;
+    FocusManager.instance.primaryFocus?.unfocus();
 
-    _controller.clear();
+    AppLoadingOverlay.show(context, message: 'Enviando comentario…');
 
-    await widget.firestore.addComment(
-      articleId: widget.article.id,
-      deviceId: widget.deviceId,
-      uid: uid, // <-- NUEVO
-      authorName: authorName, // <-- mejor que Anonymous
-      text: text,
-    );
+    try {
+      final uid = user.uid;
+      final authorName = await _resolveAuthorName(user);
 
-    widget.onCommentSent?.call();
+      _controller.clear();
+
+      await widget.addComment(
+        params: AddCommentParams(
+          articleId: widget.article.id,
+          deviceId: widget.deviceId,
+          uid: uid,
+          authorName: authorName,
+          text: text,
+        ),
+      );
+
+      if (!mounted) return;
+
+      AppToast.showSuccess(context, 'Comentario enviado');
+      widget.onCommentSent?.call();
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.showError(
+        context,
+        'No se pudo enviar el comentario. Intenta nuevamente.',
+      );
+    } finally {
+      if (mounted) {
+        AppLoadingOverlay.hide(context);
+      }
+      _sending = false;
+    }
   }
 
   @override
@@ -103,13 +134,23 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
             const Divider(height: 1, color: Colors.white12),
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: widget.firestore.watchComments(widget.article.id),
+                stream: widget.watchComments(widget.article.id),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(
+                      child: Text(
+                        'No se pudieron cargar los comentarios.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
+
                   final items = snapshot.data ?? const <Map<String, dynamic>>[];
+
                   if (items.isEmpty) {
                     return const Center(
                       child: Text(
-                        'No comments yet',
+                        'Aún no hay comentarios',
                         style: TextStyle(color: Colors.white54),
                       ),
                     );
@@ -133,14 +174,14 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
                             child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.06),
+                                color: Colors.white.withOpacity(0.06),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    (c['authorName'] as String?) ?? 'Anon',
+                                    (c['authorName'] as String?) ?? 'Anónimo',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
@@ -165,7 +206,6 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
               ),
             ),
             const Divider(height: 1, color: Colors.white12),
-
             SafeArea(
               top: false,
               child: Padding(
@@ -175,12 +215,13 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
                     Expanded(
                       child: TextField(
                         controller: _controller,
+                        enabled: !_sending,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'Add a comment...',
+                          hintText: 'Escribe un comentario…',
                           hintStyle: const TextStyle(color: Colors.white54),
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.06),
+                          fillColor: Colors.white.withOpacity(0.06),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
@@ -192,7 +233,8 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      onPressed: _send,
+                      tooltip: 'Enviar',
+                      onPressed: _sending ? null : _send,
                       icon: const Icon(Icons.send, color: Colors.white),
                     ),
                   ],

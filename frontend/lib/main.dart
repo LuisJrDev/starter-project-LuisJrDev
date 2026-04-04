@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'config/routes/routes.dart';
 import 'config/theme/app_themes.dart';
 import 'features/auth/presentation/cubit/auth_cubit.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
@@ -49,7 +48,6 @@ class MyApp extends StatelessWidget {
         theme: theme(),
         darkTheme: darkTheme(),
         themeMode: ThemeMode.dark,
-        onGenerateRoute: AppRoutes.onGenerateRoutes,
         home: const AuthGate(),
       ),
     );

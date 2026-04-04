@@ -39,20 +39,16 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final name = user?.displayName ?? user?.email ?? 'User';
+    final name = user?.displayName ?? user?.email ?? 'Usuario';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text('Perfil'),
         actions: [
           IconButton(
             tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout),
             onPressed: () => _confirmAndLogout(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {},
           ),
         ],
       ),
@@ -71,7 +67,7 @@ class ProfilePage extends StatelessWidget {
                       Text(name, style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 4),
                       Text(
-                        'Journalist • Drafts & Published articles',
+                        'Periodista • Borradores y artículos publicados',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],

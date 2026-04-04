@@ -17,7 +17,7 @@ class FeedCard extends StatefulWidget {
   final int commentCount;
 
   final VoidCallback onReadMore;
-  final VoidCallback onLike; // botón: toggle
+  final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onShare;
 
@@ -45,7 +45,6 @@ class _FeedCardState extends State<FeedCard> {
     HapticFeedback.lightImpact();
     setState(() => _pulse++);
 
-    // TikTok style: double tap only likes (doesn't unlike)
     if (!widget.isLiked) widget.onLike();
   }
 

@@ -1,4 +1,3 @@
-// lib/features/journalist_articles/presentation/bloc/journalist_article/list/my_published_article_list_cubit.dart
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 

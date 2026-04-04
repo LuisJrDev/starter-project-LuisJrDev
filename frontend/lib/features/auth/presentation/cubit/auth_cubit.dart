@@ -35,9 +35,8 @@ class AuthCubit extends Cubit<AuthState> {
     emit(const AuthLoading());
     try {
       await _signIn(email: email.trim(), password: password);
-      // authStateChanges emite y moverá el estado
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(e));
       emit(const AuthUnauthenticated());
     }
   }
@@ -47,7 +46,7 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       await _signUp(email: email.trim(), password: password, name: name.trim());
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(e));
       emit(const AuthUnauthenticated());
     }
   }

@@ -8,6 +8,6 @@ class WatchPublishedJournalistArticlesUseCase {
   WatchPublishedJournalistArticlesUseCase(this._repository);
 
   Stream<List<JournalistArticleEntity>> call() {
-    return _repository.watchPublishedArticles(); // GLOBAL
+    return _repository.watchPublishedArticles();
   }
 }

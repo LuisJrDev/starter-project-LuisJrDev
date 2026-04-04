@@ -8,11 +8,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../../core/device/device_id_service.dart';
+import '../../../../../core/widgets/app_toast.dart';
 import '../../../../../injection_container.dart';
-import '../../../data/data_sources/remote/journalist_firestore_service.dart';
+import '../../../domain/entities/journalist_article.dart';
+import '../../../domain/usecases/add_comment.dart';
+import '../../../domain/usecases/is_liked.dart';
+import '../../../domain/usecases/toggle_like.dart';
+import '../../../domain/usecases/watch_comments.dart';
 import '../../bloc/journalist_article/list/article_list_state.dart';
 import '../../bloc/journalist_article/list/published_article_list_cubit.dart';
-import '../../../domain/entities/journalist_article.dart';
 import '../../controllers/saved_articles_controller.dart';
 import '../../widgets/feed/comments_firestore_sheet.dart';
 import '../../widgets/feed/feed_card.dart';
@@ -34,10 +38,8 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
   late final PublishedArticleListCubit _cubit;
   late final FeedReactionsStore _reactions;
   late final DeviceIdService _deviceIdService;
-  late final JournalistFirestoreService _firestore;
   late final String _deviceId;
 
-  // Cache de downloadURL por storage path
   final Map<String, Future<String>> _urlFutures = {};
 
   @override
@@ -45,11 +47,24 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
     super.initState();
     _cubit = sl<PublishedArticleListCubit>()..start();
     _deviceIdService = sl<DeviceIdService>();
-    _firestore = sl<JournalistFirestoreService>();
     _deviceId = _deviceIdService.getOrCreate();
+
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {}
-    _reactions = FeedReactionsStore(_firestore, _deviceId, uid!);
+    if (uid == null) {
+      // En teoría no pasa porque AuthGate no deja entrar,
+      // pero por seguridad evitamos crash.
+      _reactions = FeedReactionsStore(
+        sl<IsArticleLikedUseCase>(),
+        sl<ToggleArticleLikeUseCase>(),
+        'unknown',
+      );
+    } else {
+      _reactions = FeedReactionsStore(
+        sl<IsArticleLikedUseCase>(),
+        sl<ToggleArticleLikeUseCase>(),
+        uid,
+      );
+    }
   }
 
   void scrollToTop() {
@@ -86,11 +101,8 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
       final url = await _getDownloadUrlCached(article.thumbnailPath);
       if (!mounted) return;
 
-      // usa State.context en vez del param para evitar lint
       await precacheImage(CachedNetworkImageProvider(url), this.context);
-    } catch (_) {
-      // ignore
-    }
+    } catch (_) {}
   }
 
   Future<void> _openCommentsFirestore(JournalistArticleEntity article) async {
@@ -102,7 +114,8 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
       builder: (_) {
         return CommentsFirestoreSheet(
           article: article,
-          firestore: _firestore,
+          watchComments: sl<WatchCommentsUseCase>(),
+          addComment: sl<AddCommentUseCase>(),
           deviceId: _deviceId,
           onCommentSent: () {},
         );
@@ -113,7 +126,13 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
   Future<void> _share(JournalistArticleEntity article) async {
     final text =
         '${article.title}\n@${article.authorName}\n\n${article.content}';
-    await Share.share(text);
+
+    try {
+      await Share.share(text);
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo compartir.');
+    }
   }
 
   @override
@@ -127,6 +146,7 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
             if (state is ArticleListLoading) {
               return const Center(child: CircularProgressIndicator());
             }
+
             if (state is ArticleListError) {
               return Center(
                 child: Padding(
@@ -137,17 +157,19 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
                       Text(
                         state.message,
                         style: const TextStyle(color: Colors.white70),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
                         onPressed: () => _cubit.start(),
-                        child: const Text('Retry'),
+                        child: const Text('Reintentar'),
                       ),
                     ],
                   ),
                 ),
               );
             }
+
             if (state is ArticleListLoaded) {
               if (state.articles.isEmpty) return const _EmptyFeed();
 
@@ -174,10 +196,7 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
                       itemBuilder: (context, index) {
                         final article = state.articles[index];
 
-                        // seed likeCount una sola vez para que el store tenga base
                         _reactions.seedLikeCount(article.id, article.likeCount);
-
-                        // precarga liked state para visible + siguiente
                         unawaited(
                           _reactions.prime([
                             article.id,
@@ -231,8 +250,6 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
                       },
                     ),
                   ),
-
-                  // Top bar fijo
                   Positioned(
                     top: 0,
                     left: 0,
@@ -244,6 +261,7 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
                             builder: (_) => ArticleSearchPage(
                               saved: widget.saved,
                               reactions: _reactions,
+                              publishedArticles: state.articles,
                             ),
                           ),
                         );
@@ -268,10 +286,13 @@ class _EmptyFeed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text(
-        'No published articles yet.\nGo to Profile → My Articles and publish one.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white70),
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Text(
+          'Aún no hay artículos publicados.\nVe a Perfil → Mis artículos y publica uno.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white70),
+        ),
       ),
     );
   }
@@ -291,7 +312,6 @@ class _NoGlowScrollBehavior extends ScrollBehavior {
 }
 
 class _BigLikeOverlay extends StatefulWidget {
-  /// Incrementa en cada double tap para forzar la animación.
   final int pulse;
 
   const _BigLikeOverlay({required this.pulse});
@@ -370,11 +390,7 @@ class _BigLikeOverlayState extends State<_BigLikeOverlay>
           opacity: opacity.value,
           child: Transform.scale(
             scale: scale.value,
-            child: const Icon(
-              Icons.favorite,
-              size: 110,
-              color: Colors.white, // TikTok style
-            ),
+            child: const Icon(Icons.favorite, size: 110, color: Colors.white),
           ),
         );
       },
@@ -419,7 +435,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     if (text.isEmpty) return;
     widget.onAdd(text);
     _controller.clear();
-    setState(() {}); // refresca lista
+    setState(() {});
   }
 
   @override

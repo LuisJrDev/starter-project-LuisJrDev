@@ -2,30 +2,33 @@ import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:news_app_clean_architecture/features/auth/data/data_sources/remote/user_profile_firestore_service.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/entities/journalist_article.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/usecases/create_article.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/usecases/upload_thumbnail.dart';
 
 import '../../../../../../core/resources/data_state.dart';
-import '../../../../data/data_sources/remote/journalist_firestore_service.dart';
+import '../../../../../auth/data/data_sources/remote/user_profile_firestore_service.dart';
+import '../../../../domain/entities/journalist_article.dart';
+import '../../../../domain/usecases/create_article.dart';
+import '../../../../domain/usecases/new_article_id.dart';
+import '../../../../domain/usecases/publish_article.dart';
 import '../../../../domain/usecases/update_article.dart';
+import '../../../../domain/usecases/upload_thumbnail.dart';
 import 'create_article_state.dart';
 
 class CreateArticleCubit extends Cubit<CreateArticleState> {
-  final JournalistFirestoreService _firestoreService;
+  final NewJournalistArticleIdUseCase _newId;
   final UploadJournalistThumbnailUseCase _uploadThumbnail;
   final CreateJournalistArticleUseCase _createArticle;
   final UpdateJournalistArticleUseCase _updateArticle;
+  final PublishJournalistArticleUseCase _publishArticle;
 
   final FirebaseAuth _auth;
   final UserProfileFirestoreService _profile;
 
   CreateArticleCubit(
-    this._firestoreService,
+    this._newId,
     this._uploadThumbnail,
     this._createArticle,
     this._updateArticle,
+    this._publishArticle,
     this._auth,
     this._profile,
   ) : super(const CreateArticleInitial());
@@ -59,7 +62,7 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     try {
       final (authorId, authorName) = await _getAuthor();
 
-      final articleId = _firestoreService.newArticleId();
+      final articleId = _newId();
 
       final uploadState = await _uploadThumbnail(
         params: UploadThumbnailParams(
@@ -81,8 +84,8 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
         title: title.trim(),
         content: content.trim(),
         status: 'draft',
-        authorId: authorId, // <-- NUEVO
-        authorName: authorName, // <-- automático
+        authorId: authorId,
+        authorName: authorName,
         thumbnailPath: uploadState.data!,
         category: category,
         publishedAt: null,
@@ -99,7 +102,11 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
       }
 
       if (publishNow) {
-        await _firestoreService.publishArticle(articleId);
+        final pubState = await _publishArticle(params: articleId);
+        if (pubState is DataFailed) {
+          emit(const CreateArticleError('Publish failed'));
+          return;
+        }
       }
 
       emit(CreateArticleSuccess(articleId));
@@ -119,12 +126,10 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     emit(const CreateArticleLoading());
 
     try {
-      // seguridad: autor siempre el del artículo, no editable desde UI
-      // (y rules también lo van a validar)
       final authorId = existing.authorId;
       final authorName = existing.authorName;
 
-      String thumbnailPath = existing.thumbnailPath;
+      var thumbnailPath = existing.thumbnailPath;
 
       if (thumbnailBytes != null && thumbnailContentType != null) {
         final uploadState = await _uploadThumbnail(
@@ -166,7 +171,11 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
       }
 
       if (publishNow) {
-        await _firestoreService.publishArticle(existing.id);
+        final pubState = await _publishArticle(params: existing.id);
+        if (pubState is DataFailed) {
+          emit(const CreateArticleError('Publish failed'));
+          return;
+        }
       }
 
       emit(CreateArticleSuccess(existing.id));

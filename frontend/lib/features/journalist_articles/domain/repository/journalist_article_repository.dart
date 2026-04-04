@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:news_app_clean_architecture/core/resources/data_state.dart';
+import '../../../../core/resources/data_state.dart';
 import '../entities/journalist_article.dart';
 
 abstract class JournalistArticleRepository {
@@ -13,7 +13,6 @@ abstract class JournalistArticleRepository {
   });
 
   Stream<List<JournalistArticleEntity>> watchPublishedArticles();
-
   Stream<List<JournalistArticleEntity>> watchArticles();
 
   Stream<List<JournalistArticleEntity>> watchMyArticles(String authorId);
@@ -21,8 +20,17 @@ abstract class JournalistArticleRepository {
     String authorId,
   );
 
-  Future<DataState<void>> createArticle(JournalistArticleEntity article);
+  Stream<List<Map<String, dynamic>>> watchComments(String articleId);
 
+  Future<void> addComment({
+    required String articleId,
+    required String deviceId,
+    required String authorName,
+    required String uid,
+    required String text,
+  });
+
+  Future<DataState<void>> createArticle(JournalistArticleEntity article);
   Future<DataState<void>> updateArticle(JournalistArticleEntity article);
 
   Future<DataState<void>> deleteArticle(
@@ -30,6 +38,11 @@ abstract class JournalistArticleRepository {
     required String thumbnailPath,
   });
 
+  Future<bool> isLiked({required String articleId, required String uid});
+  Future<void> toggleLike({required String articleId, required String uid});
+
   Future<DataState<void>> publishArticle(String articleId);
   Future<DataState<List<JournalistArticleEntity>>> getPublishedArticles();
+
+  String newArticleId();
 }

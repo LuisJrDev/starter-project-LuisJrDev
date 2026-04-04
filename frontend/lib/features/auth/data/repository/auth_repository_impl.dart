@@ -37,10 +37,8 @@ class AuthRepositoryImpl implements AuthRepository {
     final u = cred.user;
     if (u == null) throw Exception('Sign-up failed (no user)');
 
-    // 1) guarda displayName en Auth
     await _service.updateDisplayName(name);
 
-    // 2) crea perfil en Firestore (para futuro “red social”)
     await _profile.createUserProfile(
       uid: u.uid,
       email: u.email ?? email,

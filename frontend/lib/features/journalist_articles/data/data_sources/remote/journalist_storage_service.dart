@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-
 import 'package:firebase_storage/firebase_storage.dart';
 
 class JournalistStorageService {
@@ -16,6 +15,10 @@ class JournalistStorageService {
     final ref = _storage.ref(path);
 
     await ref.putData(bytes, SettableMetadata(contentType: contentType));
-    return path; // guardamos path, no URL
+    return path;
+  }
+
+  Future<void> deleteByPath(String path) async {
+    await _storage.ref(path).delete();
   }
 }

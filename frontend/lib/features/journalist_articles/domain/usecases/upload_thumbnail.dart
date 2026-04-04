@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:news_app_clean_architecture/core/resources/data_state.dart';
-import 'package:news_app_clean_architecture/core/usecase/usecase.dart';
-
+import '../../../../core/resources/data_state.dart';
+import '../../../../core/usecase/usecase.dart';
 import '../repository/journalist_article_repository.dart';
 
 class UploadThumbnailParams {

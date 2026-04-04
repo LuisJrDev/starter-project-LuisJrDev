@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../../injection_container.dart';
 import '../../../data/data_sources/local/saved_articles_local_store.dart';
+import '../../bloc/journalist_article/create/create_article_cubit.dart';
 import '../../controllers/saved_articles_controller.dart';
 import '../add_article/add_article_page.dart';
 import '../feed/article_feed_page.dart';
@@ -16,12 +19,10 @@ class AppShellPage extends StatefulWidget {
 class _AppShellPageState extends State<AppShellPage> {
   int _index = 0;
   int _createKey = 0;
-  // 0 Drafts, 1 Published
   int _profileInitialTabIndex = 0;
 
   final GlobalKey<ArticleFeedPageState> _feedKey = GlobalKey();
 
-  // Bookmarks local (single instance for whole app)
   late final SavedArticlesController _saved = SavedArticlesController(
     SavedArticlesLocalStore(),
   );
@@ -57,15 +58,19 @@ class _AppShellPageState extends State<AppShellPage> {
     final pages = <Widget>[
       ArticleFeedPage(key: _feedKey, saved: _saved),
 
-      AddArticlePage(
-        key: ValueKey('create-$_createKey'),
-        onResult: (result) {
-          if (result == AddArticleResult.published) {
-            _goToFeed(scrollToTop: true);
-          } else {
-            _goToProfileDrafts();
-          }
-        },
+      BlocProvider<CreateArticleCubit>(
+        key: ValueKey('create-provider-$_createKey'),
+        create: (_) => sl<CreateArticleCubit>(),
+        child: AddArticlePage(
+          key: ValueKey('create-$_createKey'),
+          onResult: (result) {
+            if (result == AddArticleResult.published) {
+              _goToFeed(scrollToTop: true);
+            } else {
+              _goToProfileDrafts();
+            }
+          },
+        ),
       ),
 
       ProfilePage(
@@ -86,7 +91,7 @@ class _AppShellPageState extends State<AppShellPage> {
           }
 
           setState(() {
-            if (i == 1) _createKey++; // entra a Create => form fresh
+            if (i == 1) _createKey++;
             _index = i;
           });
         },
@@ -99,12 +104,12 @@ class _AppShellPageState extends State<AppShellPage> {
           NavigationDestination(
             icon: Icon(Icons.add_box_outlined),
             selectedIcon: Icon(Icons.add_box),
-            label: 'Create',
+            label: 'Crear',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: 'Profile',
+            label: 'Perfil',
           ),
         ],
       ),

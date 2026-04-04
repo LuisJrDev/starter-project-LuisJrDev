@@ -4,10 +4,8 @@ ThemeData theme() => _buildTheme(brightness: Brightness.light);
 ThemeData darkTheme() => _buildTheme(brightness: Brightness.dark);
 
 ThemeData _buildTheme({required Brightness brightness}) {
-  // Gris neutro moderno + acento suave (no “chillón”)
-  const seed = Color(0xFF9CA3AF); // gray-ish seed (tailwind gray-400 vibe)
-  const accent = Color(0xFFE11D48); // rose-600 (solo para highlights como like)
-
+  const seed = Color(0xFF9CA3AF);
+  const accent = Color(0xFFE11D48);
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
@@ -37,7 +35,6 @@ ThemeData _buildTheme({required Brightness brightness}) {
       ),
     ),
 
-    // Inputs más “premium”
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: isDark
@@ -49,7 +46,6 @@ ThemeData _buildTheme({required Brightness brightness}) {
       ),
     ),
 
-    // NavigationBar moderno
     navigationBarTheme: NavigationBarThemeData(
       height: 72,
       backgroundColor: isDark
@@ -80,7 +76,6 @@ ThemeData _buildTheme({required Brightness brightness}) {
       }),
     ),
 
-    // Botones coherentes
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
         shape: WidgetStatePropertyAll(

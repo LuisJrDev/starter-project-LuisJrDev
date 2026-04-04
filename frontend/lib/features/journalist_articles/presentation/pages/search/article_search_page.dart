@@ -1,14 +1,11 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../../core/device/device_id_service.dart';
-import '../../../../../../injection_container.dart';
-import '../../../data/data_sources/remote/journalist_firestore_service.dart';
+import '../../../../../core/widgets/app_toast.dart';
 import '../../../domain/entities/journalist_article.dart';
 import '../../controllers/saved_articles_controller.dart';
 import '../article_detail/article_detail_page.dart';
@@ -16,13 +13,17 @@ import '../feed/feed_reactions_store.dart';
 
 class ArticleSearchPage extends StatefulWidget {
   final SavedArticlesController saved;
-  final FeedReactionsStore reactions; // <-- NUEVO
+  final FeedReactionsStore reactions;
+
+  final List<JournalistArticleEntity> publishedArticles;
 
   const ArticleSearchPage({
     super.key,
     required this.saved,
     required this.reactions,
+    required this.publishedArticles,
   });
+
   @override
   State<ArticleSearchPage> createState() => _ArticleSearchPageState();
 }
@@ -31,36 +32,8 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
   final _controller = TextEditingController();
   String _q = '';
 
-  late final JournalistFirestoreService _firestore;
-  late final DeviceIdService _deviceIdService;
-  late final String _deviceId;
-  late final FeedReactionsStore _reactions;
-
-  // Cache de downloadURL por storage path
   final Map<String, Future<String>> _urlFutures = {};
-
-  // Para no re-primear lo mismo en cada rebuild
   List<String> _primedIds = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _firestore = sl<JournalistFirestoreService>();
-
-    _deviceIdService = sl<DeviceIdService>();
-    _deviceId = _deviceIdService.getOrCreate();
-
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {}
-    _reactions = FeedReactionsStore(_firestore, _deviceId, uid!);
-  }
-
-  @override
-  void dispose() {
-    _reactions.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
 
   Future<String> _getDownloadUrlCached(String path) {
     return _urlFutures.putIfAbsent(
@@ -105,12 +78,30 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
   Future<void> _share(JournalistArticleEntity article) async {
     final text =
         '${article.title}\n@${article.authorName}\n\n${article.content}';
-    await Share.share(text);
+    try {
+      await Share.share(text);
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo compartir.');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    final all = widget.publishedArticles;
+    final isQueryEmpty = _q.trim().isEmpty;
+    final filtered = all.where((a) => _matches(a, _q)).toList();
+    final results = isQueryEmpty ? filtered.take(10).toList() : filtered;
+
+    if (results.isNotEmpty) _primeIfNeeded(results);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -132,97 +123,61 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
           ),
         ),
       ),
-      body: StreamBuilder<List<JournalistArticleEntity>>(
-        stream: _firestore.watchPublishedArticles(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting &&
-              !snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(
+      body: results.isEmpty
+          ? const Center(
               child: Text(
-                'Error: ${snap.error}',
-                style: const TextStyle(color: Colors.white70),
-              ),
-            );
-          }
-
-          final all = snap.data ?? const <JournalistArticleEntity>[];
-
-          final isQueryEmpty = _q.trim().isEmpty;
-          final filtered = all.where((a) => _matches(a, _q)).toList();
-
-          // Decide qué mostrar:
-          // - Query vacío => "Lo último" (top 10)
-          // - Query con texto => resultados filtrados
-          final results = isQueryEmpty ? filtered.take(10).toList() : filtered;
-
-          if (results.isEmpty) {
-            return const Center(
-              child: Text(
-                'No results',
+                'Sin resultados',
                 style: TextStyle(color: Colors.white70),
               ),
-            );
-          }
-
-          // Prime del liked-state solo cuando cambie el set de resultados
-          _primeIfNeeded(results);
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-            children: [
-              Text(
-                isQueryEmpty ? 'Lo último en noticias' : 'Resultados',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              ...results.map(
-                (a) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: AnimatedBuilder(
-                    animation: widget.reactions,
-                    builder: (context, _) {
-                      // Base del contador una sola vez
-                      widget.reactions.seedLikeCount(a.id, a.likeCount);
-
-                      final isLiked = widget.reactions.isLiked(
-                        a.id,
-                        fallback: false,
-                      );
-                      final likeCount = widget.reactions.likeCount(
-                        a.id,
-                        fallback: a.likeCount,
-                      );
-
-                      return _SearchResultCard(
-                        article: a,
-                        getUrl: _getDownloadUrlCached,
-                        onTap: () => _openDetail(a),
-                        isLiked: isLiked,
-                        likeCount: likeCount,
-                        onLike: () =>
-                            widget.reactions.toggleLike(articleId: a.id),
-                        onShare: () => _share(a),
-                      );
-                    },
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+              children: [
+                Text(
+                  isQueryEmpty ? 'Lo último en noticias' : 'Resultados',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.95),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                ...results.map(
+                  (a) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: AnimatedBuilder(
+                      animation: widget.reactions,
+                      builder: (context, _) {
+                        widget.reactions.seedLikeCount(a.id, a.likeCount);
 
-              const SizedBox(height: 6),
-              Divider(color: scheme.onSurface.withValues(alpha: 0.12)),
-              const SizedBox(height: 12),
-            ],
-          );
-        },
-      ),
+                        final isLiked = widget.reactions.isLiked(
+                          a.id,
+                          fallback: false,
+                        );
+                        final likeCount = widget.reactions.likeCount(
+                          a.id,
+                          fallback: a.likeCount,
+                        );
+
+                        return _SearchResultCard(
+                          article: a,
+                          getUrl: _getDownloadUrlCached,
+                          onTap: () => _openDetail(a),
+                          isLiked: isLiked,
+                          likeCount: likeCount,
+                          onLike: () =>
+                              widget.reactions.toggleLike(articleId: a.id),
+                          onShare: () => _share(a),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Divider(color: scheme.onSurface.withOpacity(0.12)),
+                const SizedBox(height: 12),
+              ],
+            ),
     );
   }
 }
@@ -247,9 +202,9 @@ class _SearchBarPill extends StatelessWidget {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
       ),
       child: Row(
         children: [
@@ -275,7 +230,7 @@ class _SearchBarPill extends StatelessWidget {
             builder: (context, value, _) {
               if (value.text.isEmpty) return const SizedBox(width: 8);
               return IconButton(
-                tooltip: 'Clear',
+                tooltip: 'Borrar',
                 onPressed: onClear,
                 icon: const Icon(Icons.close, color: Colors.white70),
               );
@@ -327,9 +282,7 @@ class _SearchResultCard extends StatelessWidget {
                 builder: (context, snap) {
                   if (!snap.hasData) {
                     return Container(
-                      color: scheme.surfaceContainerHighest.withValues(
-                        alpha: 0.25,
-                      ),
+                      color: scheme.surfaceContainerHighest.withOpacity(0.25),
                       child: const Center(child: CircularProgressIndicator()),
                     );
                   }
@@ -346,7 +299,6 @@ class _SearchResultCard extends StatelessWidget {
                   ),
                 ),
               ),
-
               Positioned(
                 left: 12,
                 right: 54,
@@ -360,7 +312,7 @@ class _SearchResultCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
+                        color: Colors.white.withOpacity(0.10),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(color: Colors.white24),
                       ),
@@ -389,7 +341,6 @@ class _SearchResultCard extends StatelessWidget {
                   ],
                 ),
               ),
-
               Positioned(
                 right: 8,
                 bottom: 10,
@@ -397,6 +348,7 @@ class _SearchResultCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
+                      tooltip: isLiked ? 'Quitar me gusta' : 'Me gusta',
                       onPressed: onLike,
                       icon: Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
@@ -412,6 +364,7 @@ class _SearchResultCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     IconButton(
+                      tooltip: 'Compartir',
                       onPressed: onShare,
                       icon: const Icon(
                         Icons.share_outlined,

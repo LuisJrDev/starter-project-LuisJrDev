@@ -1,12 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:news_app_clean_architecture/core/resources/data_state.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/data/data_sources/remote/journalist_firestore_service.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/data/data_sources/remote/journalist_storage_service.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/data/models/journalist_article.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/entities/journalist_article.dart';
-import 'package:news_app_clean_architecture/features/journalist_articles/domain/repository/journalist_article_repository.dart';
+
+import '../../../../core/resources/data_state.dart';
+import '../../domain/entities/journalist_article.dart';
+import '../../domain/repository/journalist_article_repository.dart';
+import '../data_sources/remote/journalist_firestore_service.dart';
+import '../data_sources/remote/journalist_storage_service.dart';
+import '../models/journalist_article.dart';
 
 class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
   final JournalistFirestoreService _firestoreService;
@@ -33,6 +34,28 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
   }
 
   @override
+  Stream<List<Map<String, dynamic>>> watchComments(String articleId) {
+    return _firestoreService.watchComments(articleId);
+  }
+
+  @override
+  Future<void> addComment({
+    required String articleId,
+    required String deviceId,
+    required String authorName,
+    required String uid,
+    required String text,
+  }) {
+    return _firestoreService.addComment(
+      articleId: articleId,
+      deviceId: deviceId,
+      authorName: authorName,
+      uid: uid,
+      text: text,
+    );
+  }
+
+  @override
   Stream<List<JournalistArticleEntity>> watchMyArticles(String authorId) {
     return _firestoreService.watchMyArticles(authorId);
   }
@@ -55,6 +78,11 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
   }
 
   @override
+  String newArticleId() {
+    return _firestoreService.newArticleId();
+  }
+
+  @override
   Future<DataState<void>> updateArticle(JournalistArticleEntity article) async {
     try {
       final model = JournalistArticleModel(
@@ -62,7 +90,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
         title: article.title,
         content: article.content,
         status: article.status,
-        authorId: article.authorId, // <-- NUEVO
+        authorId: article.authorId,
         authorName: article.authorName,
         thumbnailPath: article.thumbnailPath,
         category: article.category,
@@ -87,13 +115,23 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       await _firestoreService.deleteArticle(articleId);
 
       try {
-        await _firestoreService.deleteByPath(thumbnailPath);
+        await _storageService.deleteByPath(thumbnailPath);
       } catch (_) {}
 
       return const DataSuccess(null);
     } catch (e) {
       return DataFailed(_wrapAsDioException(e, '/articles/delete'));
     }
+  }
+
+  @override
+  Future<bool> isLiked({required String articleId, required String uid}) {
+    return _firestoreService.isLiked(articleId: articleId, uid: uid);
+  }
+
+  @override
+  Future<void> toggleLike({required String articleId, required String uid}) {
+    return _firestoreService.toggleLike(articleId: articleId, uid: uid);
   }
 
   @override
@@ -122,7 +160,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
         title: article.title,
         content: article.content,
         status: article.status,
-        authorId: article.authorId, // <-- NUEVO
+        authorId: article.authorId,
         authorName: article.authorName,
         thumbnailPath: article.thumbnailPath,
         category: article.category,

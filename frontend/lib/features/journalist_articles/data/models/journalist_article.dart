@@ -8,7 +8,7 @@ class JournalistArticleModel extends JournalistArticleEntity {
     required super.content,
     required super.category,
     required super.status,
-    required super.authorId, // <-- NUEVO
+    required super.authorId,
     required super.authorName,
     required super.thumbnailPath,
     required super.publishedAt,
@@ -27,7 +27,7 @@ class JournalistArticleModel extends JournalistArticleEntity {
       title: (data['title'] as String?) ?? '',
       content: (data['content'] as String?) ?? '',
       status: (data['status'] as String?) ?? 'draft',
-      authorId: (data['authorId'] as String?) ?? '', // <-- NUEVO
+      authorId: (data['authorId'] as String?) ?? '',
       authorName: (data['authorName'] as String?) ?? '',
       thumbnailPath: (data['thumbnailPath'] as String?) ?? '',
       category: (data['category'] as String?) ?? 'General',
@@ -44,7 +44,7 @@ class JournalistArticleModel extends JournalistArticleEntity {
       'title': title,
       'content': content,
       'status': status,
-      'authorId': authorId, // <-- NUEVO
+      'authorId': authorId,
       'authorName': authorName,
       'thumbnailPath': thumbnailPath,
       if (publishedAt != null) 'publishedAt': Timestamp.fromDate(publishedAt!),

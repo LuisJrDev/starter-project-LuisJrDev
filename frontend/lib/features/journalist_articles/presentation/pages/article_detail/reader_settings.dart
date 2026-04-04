@@ -51,11 +51,12 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
           Row(
             children: [
               const Text(
-                'Text size',
+                'Tamaño del texto',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
               IconButton(
+                tooltip: 'Disminuir',
                 onPressed: _scale <= 0.9
                     ? null
                     : () => setState(() => _scale -= 0.1),
@@ -63,6 +64,7 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
               ),
               Text('${(_scale * 100).round()}%'),
               IconButton(
+                tooltip: 'Aumentar',
                 onPressed: _scale >= 1.6
                     ? null
                     : () => setState(() => _scale += 0.1),
@@ -71,23 +73,19 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
             ],
           ),
           const SizedBox(height: 8),
-
           Row(
             children: [
-              const Text(
-                'Theme',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              const Text('Tema', style: TextStyle(fontWeight: FontWeight.w700)),
               const Spacer(),
               SegmentedButton<ReaderThemePreset>(
                 segments: const [
                   ButtonSegment(
                     value: ReaderThemePreset.dark,
-                    label: Text('Dark'),
+                    label: Text('Oscuro'),
                   ),
                   ButtonSegment(
                     value: ReaderThemePreset.gray,
-                    label: Text('Gray'),
+                    label: Text('Gris'),
                   ),
                   ButtonSegment(
                     value: ReaderThemePreset.sepia,
@@ -100,7 +98,6 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
             ],
           ),
           const SizedBox(height: 14),
-
           SizedBox(
             width: double.infinity,
             child: FilledButton(
@@ -110,7 +107,7 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
                   ReaderSettings(fontScale: _scale, preset: _preset),
                 );
               },
-              child: const Text('Apply'),
+              child: const Text('Aplicar'),
             ),
           ),
         ],

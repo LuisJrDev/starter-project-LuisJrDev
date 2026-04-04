@@ -21,7 +21,7 @@ class FeedTopBar extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               Text(
-                'For You',
+                'Para ti',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,

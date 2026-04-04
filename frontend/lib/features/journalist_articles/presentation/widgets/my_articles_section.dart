@@ -3,20 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/resources/data_state.dart';
+import '../../../../core/widgets/app_loading_overlay.dart';
+import '../../../../core/widgets/app_toast.dart';
 import '../../../../injection_container.dart';
 import '../../domain/entities/journalist_article.dart';
 import '../../domain/usecases/delete_article.dart';
+import '../../domain/usecases/publish_article.dart';
+import '../bloc/journalist_article/create/create_article_cubit.dart';
 import '../bloc/journalist_article/list/article_list_cubit.dart';
 import '../bloc/journalist_article/list/article_list_state.dart';
 import '../bloc/journalist_article/list/my_published_article_list_cubit.dart';
-import '../../domain/usecases/publish_article.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../controllers/saved_articles_controller.dart';
 import '../pages/add_article/add_article_page.dart';
 import '../pages/article_detail/article_detail_page.dart';
-import '../controllers/saved_articles_controller.dart';
 
 class MyArticlesSection extends StatefulWidget {
   final int initialTabIndex;
@@ -65,24 +68,26 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     String articleId,
     String uid,
   ) async {
-    final useCase = sl<PublishJournalistArticleUseCase>();
-    final result = await useCase(params: articleId);
+    AppLoadingOverlay.show(context, message: 'Publicando…');
+    try {
+      final useCase = sl<PublishJournalistArticleUseCase>();
+      final result = await useCase(params: articleId);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (result is DataSuccess) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Article published')));
+      if (result is DataSuccess) {
+        AppToast.showSuccess(context, 'Artículo publicado');
 
-      _tabController.animateTo(1);
-
-      // IMPORTANTE: usa innerContext (debajo del provider)
-      innerContext.read<MyPublishedArticleListCubit>().start(uid);
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to publish')));
+        _tabController.animateTo(1);
+        innerContext.read<MyPublishedArticleListCubit>().start(uid);
+      } else {
+        AppToast.showError(context, 'No se pudo publicar. Intenta nuevamente.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo publicar. Intenta nuevamente.');
+    } finally {
+      if (mounted) AppLoadingOverlay.hide(context);
     }
   }
 
@@ -90,7 +95,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      return const Center(child: Text('Not signed in'));
+      return const Center(child: Text('No has iniciado sesión'));
     }
 
     return MultiBlocProvider(
@@ -107,16 +112,15 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
               TabBar(
                 controller: _tabController,
                 tabs: const [
-                  Tab(text: 'Drafts'),
-                  Tab(text: 'Published'),
-                  Tab(text: 'Saved'),
+                  Tab(text: 'Borradores'),
+                  Tab(text: 'Publicados'),
+                  Tab(text: 'Guardados'),
                 ],
               ),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    // Drafts
                     BlocBuilder<ArticleListCubit, ArticleListState>(
                       builder: (context, state) {
                         if (state is ArticleListLoading) {
@@ -133,7 +137,9 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                               .toList();
 
                           if (drafts.isEmpty) {
-                            return const Center(child: Text('No drafts yet'));
+                            return const Center(
+                              child: Text('Aún no tienes borradores'),
+                            );
                           }
 
                           return ListView.separated(
@@ -147,7 +153,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                 articleId: a.id,
                                 title: a.title,
                                 authorName: a.authorName,
-                                statusLabel: 'Draft',
+                                statusLabel: 'Borrador',
                                 statusColor: Colors.orange,
                                 thumbnailPath: a.thumbnailPath,
                                 getUrl: _getDownloadUrlCached,
@@ -157,11 +163,11 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                     FilledButton.tonal(
                                       onPressed: () =>
                                           _publish(innerContext, a.id, uid),
-                                      child: const Text('Publish'),
+                                      child: const Text('Publicar'),
                                     ),
                                     const SizedBox(width: 8),
                                     IconButton(
-                                      tooltip: 'Delete',
+                                      tooltip: 'Eliminar',
                                       onPressed: () => _deleteArticle(
                                         innerContext: innerContext,
                                         articleId: a.id,
@@ -175,13 +181,19 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => AddArticlePage.edit(
-                                        article: a,
-                                        thumbnailUrlFuture:
-                                            _getDownloadUrlCached(
-                                              a.thumbnailPath,
+                                      builder: (_) =>
+                                          BlocProvider<CreateArticleCubit>(
+                                            // ✅ FIX: AddArticlePage.edit necesita su CreateArticleCubit
+                                            create: (_) =>
+                                                sl<CreateArticleCubit>(),
+                                            child: AddArticlePage.edit(
+                                              article: a,
+                                              thumbnailUrlFuture:
+                                                  _getDownloadUrlCached(
+                                                    a.thumbnailPath,
+                                                  ),
                                             ),
-                                      ),
+                                          ),
                                     ),
                                   );
                                 },
@@ -192,8 +204,6 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                         return const SizedBox();
                       },
                     ),
-
-                    // Published
                     BlocBuilder<MyPublishedArticleListCubit, ArticleListState>(
                       builder: (context, state) {
                         if (state is ArticleListLoading) {
@@ -207,7 +217,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                         if (state is ArticleListLoaded) {
                           if (state.articles.isEmpty) {
                             return const Center(
-                              child: Text('No published yet'),
+                              child: Text('Aún no tienes artículos publicados'),
                             );
                           }
 
@@ -222,12 +232,12 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                 articleId: a.id,
                                 title: a.title,
                                 authorName: a.authorName,
-                                statusLabel: 'Published',
+                                statusLabel: 'Publicado',
                                 statusColor: Colors.green,
                                 thumbnailPath: a.thumbnailPath,
                                 getUrl: _getDownloadUrlCached,
                                 trailing: IconButton(
-                                  tooltip: 'Delete',
+                                  tooltip: 'Eliminar',
                                   onPressed: () => _deleteArticle(
                                     innerContext: innerContext,
                                     articleId: a.id,
@@ -259,12 +269,10 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                         return const SizedBox();
                       },
                     ),
-                    // Saved
                     AnimatedBuilder(
                       animation: widget.saved,
                       builder: (context, _) {
                         if (!widget.saved.loaded) {
-                          // por si aún no carga (primera vez)
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -273,7 +281,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                         final savedItems = widget.saved.items;
                         if (savedItems.isEmpty) {
                           return const Center(
-                            child: Text('No saved articles yet'),
+                            child: Text('Aún no tienes artículos guardados'),
                           );
                         }
 
@@ -289,13 +297,20 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                               articleId: s.id,
                               title: s.title,
                               authorName: s.authorName,
-                              statusLabel: 'Saved',
+                              statusLabel: 'Guardado',
                               statusColor: Colors.blueGrey,
                               thumbnailPath: s.thumbnailPath,
                               getUrl: _getDownloadUrlCached,
                               trailing: IconButton(
-                                tooltip: 'Remove',
-                                onPressed: () => widget.saved.remove(s.id),
+                                tooltip: 'Quitar',
+                                onPressed: () async {
+                                  await widget.saved.remove(s.id);
+                                  if (!context.mounted) return;
+                                  AppToast.showSuccess(
+                                    context,
+                                    'Quitado de guardados',
+                                  );
+                                },
                                 icon: const Icon(
                                   Icons.bookmark_remove_outlined,
                                 ),
@@ -358,16 +373,16 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete article?'),
-        content: const Text('This action cannot be undone.'),
+        title: const Text('¿Eliminar artículo?'),
+        content: const Text('Esta acción no se puede deshacer.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: const Text('Cancelar'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
+            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -384,28 +399,29 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     final ok = await _confirmDelete(context);
     if (!ok) return;
 
-    final useCase = sl<DeleteJournalistArticleUseCase>();
-    final result = await useCase(
-      params: DeleteArticleParams(
-        articleId: articleId,
-        thumbnailPath: thumbnailPath,
-      ),
-    );
-    if (!mounted) return;
+    AppLoadingOverlay.show(context, message: 'Eliminando…');
+    try {
+      final useCase = sl<DeleteJournalistArticleUseCase>();
+      final result = await useCase(
+        params: DeleteArticleParams(
+          articleId: articleId,
+          thumbnailPath: thumbnailPath,
+        ),
+      );
+      if (!mounted) return;
 
-    if (result is DataSuccess) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Article deleted')));
-
-      // refresca ambas tabs
-      innerContext.read<ArticleListCubit>().start(uid);
-      innerContext.read<MyPublishedArticleListCubit>().start(uid);
-      // si estás en Published y borraste, te quedas; si borraste draft, igual ok
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to delete')));
+      if (result is DataSuccess) {
+        AppToast.showSuccess(context, 'Artículo eliminado');
+        innerContext.read<ArticleListCubit>().start(uid);
+        innerContext.read<MyPublishedArticleListCubit>().start(uid);
+      } else {
+        AppToast.showError(context, 'No se pudo eliminar. Intenta nuevamente.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showError(context, 'No se pudo eliminar. Intenta nuevamente.');
+    } finally {
+      if (mounted) AppLoadingOverlay.hide(context);
     }
   }
 }
@@ -445,7 +461,6 @@ class _ArticleCardTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
             AspectRatio(
               aspectRatio: 16 / 9,
               child: FutureBuilder<String>(
@@ -479,7 +494,6 @@ class _ArticleCardTile extends StatelessWidget {
                         ),
                         fadeInDuration: const Duration(milliseconds: 120),
                       ),
-                      // Status chip
                       Positioned(
                         left: 10,
                         top: 10,
@@ -507,8 +521,6 @@ class _ArticleCardTile extends StatelessWidget {
                 },
               ),
             ),
-
-            // Text
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               child: Column(
