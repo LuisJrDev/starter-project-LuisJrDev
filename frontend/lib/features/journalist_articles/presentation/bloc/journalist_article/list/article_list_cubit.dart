@@ -13,11 +13,11 @@ class ArticleListCubit extends Cubit<ArticleListState> {
 
   ArticleListCubit(this._watchArticles) : super(const ArticleListLoading());
 
-  void start() {
+  void start(String authorId) {
     emit(const ArticleListLoading());
 
     _sub?.cancel();
-    _sub = _watchArticles().listen(
+    _sub = _watchArticles(authorId).listen(
       (articles) => emit(ArticleListLoaded(articles)),
       onError: (_) => emit(const ArticleListError('Failed to load articles')),
     );

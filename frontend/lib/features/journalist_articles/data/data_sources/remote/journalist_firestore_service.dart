@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../../../domain/entities/journalist_article.dart';
 import '../../models/journalist_article.dart';
 
 class JournalistFirestoreService {
@@ -65,20 +66,14 @@ class JournalistFirestoreService {
 
   DocumentReference<Map<String, dynamic>> _reactionDoc({
     required String articleId,
-    required String deviceId,
-  }) => _articleDoc(articleId).collection('reactions').doc(deviceId);
+    required String uid,
+  }) => _articleDoc(articleId).collection('reactions').doc(uid);
 
   CollectionReference<Map<String, dynamic>> _commentsCol(String articleId) =>
       _articleDoc(articleId).collection('comments');
 
-  Future<bool> isLiked({
-    required String articleId,
-    required String deviceId,
-  }) async {
-    final doc = await _reactionDoc(
-      articleId: articleId,
-      deviceId: deviceId,
-    ).get();
+  Future<bool> isLiked({required String articleId, required String uid}) async {
+    final doc = await _reactionDoc(articleId: articleId, uid: uid).get();
     return doc.exists;
   }
 
@@ -107,10 +102,10 @@ class JournalistFirestoreService {
 
   Future<void> toggleLike({
     required String articleId,
-    required String deviceId,
+    required String uid,
   }) async {
     final articleRef = _articleDoc(articleId);
-    final reactionRef = _reactionDoc(articleId: articleId, deviceId: deviceId);
+    final reactionRef = _reactionDoc(articleId: articleId, uid: uid);
 
     await _firestore.runTransaction((tx) async {
       final reactionSnap = await tx.get(reactionRef);
@@ -123,6 +118,7 @@ class JournalistFirestoreService {
         });
       } else {
         tx.set(reactionRef, {
+          'uid': uid,
           'type': 'like',
           'createdAt': Timestamp.fromDate(DateTime.now()),
         });
@@ -138,6 +134,7 @@ class JournalistFirestoreService {
     required String articleId,
     required String deviceId,
     required String authorName,
+    required String uid,
     required String text,
   }) async {
     final articleRef = _articleDoc(articleId);
@@ -147,6 +144,7 @@ class JournalistFirestoreService {
 
     await _firestore.runTransaction((tx) async {
       tx.set(commentRef, {
+        'uid': uid,
         'deviceId': deviceId,
         'authorName': authorName,
         'text': text,
@@ -165,5 +163,30 @@ class JournalistFirestoreService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map((d) => d.data()).toList());
+  }
+
+  Stream<List<JournalistArticleEntity>> watchMyArticles(String authorId) {
+    return _articles
+        .where('authorId', isEqualTo: authorId)
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map(JournalistArticleModel.fromFirestore).toList(),
+        );
+  }
+
+  Stream<List<JournalistArticleEntity>> watchMyPublishedArticles(
+    String authorId,
+  ) {
+    return _articles
+        .where('authorId', isEqualTo: authorId)
+        .where('status', isEqualTo: 'published')
+        .orderBy('publishedAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map(JournalistArticleModel.fromFirestore).toList(),
+        );
   }
 }

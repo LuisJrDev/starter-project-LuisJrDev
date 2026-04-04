@@ -8,6 +8,7 @@ class JournalistArticleModel extends JournalistArticleEntity {
     required super.content,
     required super.category,
     required super.status,
+    required super.authorId, // <-- NUEVO
     required super.authorName,
     required super.thumbnailPath,
     required super.publishedAt,
@@ -26,6 +27,7 @@ class JournalistArticleModel extends JournalistArticleEntity {
       title: (data['title'] as String?) ?? '',
       content: (data['content'] as String?) ?? '',
       status: (data['status'] as String?) ?? 'draft',
+      authorId: (data['authorId'] as String?) ?? '', // <-- NUEVO
       authorName: (data['authorName'] as String?) ?? '',
       thumbnailPath: (data['thumbnailPath'] as String?) ?? '',
       category: (data['category'] as String?) ?? 'General',
@@ -42,13 +44,13 @@ class JournalistArticleModel extends JournalistArticleEntity {
       'title': title,
       'content': content,
       'status': status,
+      'authorId': authorId, // <-- NUEVO
       'authorName': authorName,
       'thumbnailPath': thumbnailPath,
       if (publishedAt != null) 'publishedAt': Timestamp.fromDate(publishedAt!),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'category': category,
-      // NEW
       'likeCount': likeCount,
       'commentCount': commentCount,
     };

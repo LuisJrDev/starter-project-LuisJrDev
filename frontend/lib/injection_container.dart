@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:news_app_clean_architecture/features/daily_news/data/data_sources/remote/news_api_service.dart';
@@ -8,6 +9,15 @@ import 'package:news_app_clean_architecture/features/daily_news/presentation/blo
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'core/device/device_id_service.dart';
+import 'features/auth/data/data_sources/remote/firebase_auth_service.dart';
+import 'features/auth/data/data_sources/remote/user_profile_firestore_service.dart';
+import 'features/auth/data/repository/auth_repository_impl.dart';
+import 'features/auth/domain/repository/auth_repository.dart';
+import 'features/auth/domain/usecases/sign_in.dart';
+import 'features/auth/domain/usecases/sign_out.dart';
+import 'features/auth/domain/usecases/sign_up.dart';
+import 'features/auth/domain/usecases/watch_auth_state.dart';
+import 'features/auth/presentation/cubit/auth_cubit.dart';
 import 'features/daily_news/data/data_sources/local/app_database.dart';
 import 'features/daily_news/domain/usecases/get_saved_article.dart';
 import 'features/daily_news/domain/usecases/remove_article.dart';
@@ -28,9 +38,11 @@ import 'features/journalist_articles/domain/usecases/publish_article.dart';
 import 'features/journalist_articles/domain/usecases/update_article.dart';
 import 'features/journalist_articles/domain/usecases/upload_thumbnail.dart';
 import 'features/journalist_articles/domain/usecases/watch_articles.dart';
+import 'features/journalist_articles/domain/usecases/watch_my_published_articles.dart';
 import 'features/journalist_articles/domain/usecases/watch_published_articles.dart';
 import 'features/journalist_articles/presentation/bloc/journalist_article/create/create_article_cubit.dart';
 import 'features/journalist_articles/presentation/bloc/journalist_article/list/article_list_cubit.dart';
+import 'features/journalist_articles/presentation/bloc/journalist_article/list/my_published_article_list_cubit.dart';
 import 'features/journalist_articles/presentation/bloc/journalist_article/list/published_article_list_cubit.dart';
 
 final sl = GetIt.instance;
@@ -99,7 +111,16 @@ Future<void> initializeDependencies() async {
 
   // Journalist feature - cubits
   sl.registerLazySingleton(() => UpdateJournalistArticleUseCase(sl()));
-  sl.registerFactory(() => CreateArticleCubit(sl(), sl(), sl(), sl()));
+  sl.registerFactory(
+    () => CreateArticleCubit(
+      sl(),
+      sl(),
+      sl(),
+      sl(),
+      sl<FirebaseAuth>(),
+      sl<UserProfileFirestoreService>(),
+    ),
+  );
   sl.registerFactory<ArticleListCubit>(() => ArticleListCubit(sl()));
 
   sl.registerSingleton<GetPublishedJournalistArticlesUseCase>(
@@ -122,7 +143,46 @@ Future<void> initializeDependencies() async {
     WatchJournalistArticlesUseCase(sl()),
   );
 
+  sl.registerSingleton<WatchMyPublishedJournalistArticlesUseCase>(
+    WatchMyPublishedJournalistArticlesUseCase(sl()),
+  );
+
+  sl.registerFactory<MyPublishedArticleListCubit>(
+    () => MyPublishedArticleListCubit(sl()),
+  );
   sl.registerSingleton<SharedPreferences>(prefs);
   sl.registerSingleton<Uuid>(const Uuid());
   sl.registerSingleton<DeviceIdService>(DeviceIdService(sl(), sl()));
+
+  // Firebase Auth instance
+  sl.registerSingleton<FirebaseAuth>(FirebaseAuth.instance);
+
+  // Auth feature - data source
+  sl.registerSingleton<FirebaseAuthService>(
+    FirebaseAuthService(sl<FirebaseAuth>()),
+  );
+
+  // Auth feature - Firestore profile service  ✅ primero
+  sl.registerSingleton<UserProfileFirestoreService>(
+    UserProfileFirestoreService(sl<FirebaseFirestore>()),
+  );
+
+  // Auth feature - repository ✅ después
+  sl.registerSingleton<AuthRepository>(
+    AuthRepositoryImpl(
+      sl<FirebaseAuthService>(),
+      sl<UserProfileFirestoreService>(),
+    ),
+  );
+
+  // Auth feature - usecases
+  sl.registerSingleton<WatchAuthStateUseCase>(
+    WatchAuthStateUseCase(sl<AuthRepository>()),
+  );
+  sl.registerSingleton<SignInUseCase>(SignInUseCase(sl<AuthRepository>()));
+  sl.registerSingleton<SignUpUseCase>(SignUpUseCase(sl<AuthRepository>()));
+  sl.registerSingleton<SignOutUseCase>(SignOutUseCase(sl<AuthRepository>()));
+
+  // Auth feature - cubit
+  sl.registerFactory<AuthCubit>(() => AuthCubit(sl(), sl(), sl(), sl()));
 }

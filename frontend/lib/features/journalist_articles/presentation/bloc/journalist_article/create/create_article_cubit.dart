@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:news_app_clean_architecture/features/auth/data/data_sources/remote/user_profile_firestore_service.dart';
 import 'package:news_app_clean_architecture/features/journalist_articles/domain/entities/journalist_article.dart';
 import 'package:news_app_clean_architecture/features/journalist_articles/domain/usecases/create_article.dart';
 import 'package:news_app_clean_architecture/features/journalist_articles/domain/usecases/upload_thumbnail.dart';
@@ -16,25 +18,47 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
   final CreateJournalistArticleUseCase _createArticle;
   final UpdateJournalistArticleUseCase _updateArticle;
 
+  final FirebaseAuth _auth;
+  final UserProfileFirestoreService _profile;
+
   CreateArticleCubit(
     this._firestoreService,
     this._uploadThumbnail,
     this._createArticle,
     this._updateArticle,
+    this._auth,
+    this._profile,
   ) : super(const CreateArticleInitial());
+
+  Future<(String uid, String authorName)> _getAuthor() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not authenticated');
+
+    final fallback = user.displayName ?? user.email ?? 'Unknown';
+
+    try {
+      final data = await _profile.getUserProfile(user.uid);
+      final name = (data?['name'] as String?)?.trim();
+      final authorName = (name != null && name.isNotEmpty) ? name : fallback;
+      return (user.uid, authorName);
+    } catch (_) {
+      return (user.uid, fallback);
+    }
+  }
 
   Future<void> submit({
     required String title,
     required String content,
-    required String authorName,
-    required String category, // <-- NUEVO
+    required String category,
     required Uint8List thumbnailBytes,
     required String thumbnailContentType,
-    bool publishNow = false, // NEW
+    bool publishNow = false,
   }) async {
     emit(const CreateArticleLoading());
 
     try {
+      final (authorId, authorName) = await _getAuthor();
+
       final articleId = _firestoreService.newArticleId();
 
       final uploadState = await _uploadThumbnail(
@@ -57,7 +81,8 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
         title: title.trim(),
         content: content.trim(),
         status: 'draft',
-        authorName: authorName.trim(),
+        authorId: authorId, // <-- NUEVO
+        authorName: authorName, // <-- automático
         thumbnailPath: uploadState.data!,
         category: category,
         publishedAt: null,
@@ -87,17 +112,20 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     required JournalistArticleEntity existing,
     required String title,
     required String content,
-    required String authorName,
-    Uint8List? thumbnailBytes, // opcional
-    String? thumbnailContentType, // opcional
+    Uint8List? thumbnailBytes,
+    String? thumbnailContentType,
     bool publishNow = false,
   }) async {
     emit(const CreateArticleLoading());
 
     try {
+      // seguridad: autor siempre el del artículo, no editable desde UI
+      // (y rules también lo van a validar)
+      final authorId = existing.authorId;
+      final authorName = existing.authorName;
+
       String thumbnailPath = existing.thumbnailPath;
 
-      // Si el user escogió thumbnail nuevo, lo subimos
       if (thumbnailBytes != null && thumbnailContentType != null) {
         final uploadState = await _uploadThumbnail(
           params: UploadThumbnailParams(
@@ -119,18 +147,18 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
         id: existing.id,
         title: title.trim(),
         content: content.trim(),
-        status: existing.status, // sigue siendo draft hasta que publiques
-        authorName: authorName.trim(),
+        status: existing.status,
+        authorId: authorId,
+        authorName: authorName,
         thumbnailPath: thumbnailPath,
         publishedAt: existing.publishedAt,
-        category: existing.category, // Asegúrate de incluir la categoría
+        category: existing.category,
         likeCount: existing.likeCount,
         commentCount: existing.commentCount,
-        createdAt: existing.createdAt, // NO se toca
-        updatedAt: DateTime.now(), // sí se actualiza
+        createdAt: existing.createdAt,
+        updatedAt: DateTime.now(),
       );
 
-      // Necesitas el use case de update:
       final updateState = await _updateArticle(params: updated);
       if (updateState is DataFailed) {
         emit(const CreateArticleError('Firestore update failed'));

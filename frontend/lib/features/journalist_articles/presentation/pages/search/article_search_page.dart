@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,9 +16,13 @@ import '../feed/feed_reactions_store.dart';
 
 class ArticleSearchPage extends StatefulWidget {
   final SavedArticlesController saved;
+  final FeedReactionsStore reactions; // <-- NUEVO
 
-  const ArticleSearchPage({super.key, required this.saved});
-
+  const ArticleSearchPage({
+    super.key,
+    required this.saved,
+    required this.reactions,
+  });
   @override
   State<ArticleSearchPage> createState() => _ArticleSearchPageState();
 }
@@ -45,7 +50,9 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
     _deviceIdService = sl<DeviceIdService>();
     _deviceId = _deviceIdService.getOrCreate();
 
-    _reactions = FeedReactionsStore(_firestore, _deviceId);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {}
+    _reactions = FeedReactionsStore(_firestore, _deviceId, uid!);
   }
 
   @override
@@ -76,7 +83,7 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
     if (listEquals(ids, _primedIds)) return;
 
     _primedIds = ids;
-    unawaited(_reactions.prime(ids));
+    unawaited(widget.reactions.prime(ids));
   }
 
   Future<void> _openDetail(JournalistArticleEntity a) async {
@@ -180,13 +187,16 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
                 (a) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: AnimatedBuilder(
-                    animation: _reactions,
+                    animation: widget.reactions,
                     builder: (context, _) {
                       // Base del contador una sola vez
-                      _reactions.seedLikeCount(a.id, a.likeCount);
+                      widget.reactions.seedLikeCount(a.id, a.likeCount);
 
-                      final isLiked = _reactions.isLiked(a.id, fallback: false);
-                      final likeCount = _reactions.likeCount(
+                      final isLiked = widget.reactions.isLiked(
+                        a.id,
+                        fallback: false,
+                      );
+                      final likeCount = widget.reactions.likeCount(
                         a.id,
                         fallback: a.likeCount,
                       );
@@ -197,7 +207,8 @@ class _ArticleSearchPageState extends State<ArticleSearchPage> {
                         onTap: () => _openDetail(a),
                         isLiked: isLiked,
                         likeCount: likeCount,
-                        onLike: () => _reactions.toggleLike(articleId: a.id),
+                        onLike: () =>
+                            widget.reactions.toggleLike(articleId: a.id),
                         onShare: () => _share(a),
                       );
                     },

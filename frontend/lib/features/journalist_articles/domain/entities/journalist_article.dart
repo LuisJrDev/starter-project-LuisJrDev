@@ -6,13 +6,13 @@ class JournalistArticleEntity extends Equatable {
   final String content;
   final String status; // "draft" | "published"
   final String authorName;
+  final String authorId; // <-- ya lo tienes
   final String thumbnailPath;
   final DateTime? publishedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String category;
 
-  // NEW
   final int likeCount;
   final int commentCount;
 
@@ -22,6 +22,7 @@ class JournalistArticleEntity extends Equatable {
     required this.content,
     required this.status,
     required this.authorName,
+    required this.authorId,
     required this.thumbnailPath,
     required this.category,
     this.publishedAt,
@@ -37,6 +38,7 @@ class JournalistArticleEntity extends Equatable {
     title,
     content,
     status,
+    authorId, // <-- NUEVO (faltaba)
     authorName,
     thumbnailPath,
     publishedAt,

@@ -1,4 +1,3 @@
-// lib/features/journalist_articles/domain/usecases/watch_articles.dart
 import '../entities/journalist_article.dart';
 import '../repository/journalist_article_repository.dart';
 
@@ -7,5 +6,6 @@ class WatchJournalistArticlesUseCase {
 
   WatchJournalistArticlesUseCase(this._repository);
 
-  Stream<List<JournalistArticleEntity>> call() => _repository.watchArticles();
+  Stream<List<JournalistArticleEntity>> call(String authorId) =>
+      _repository.watchMyArticles(authorId);
 }

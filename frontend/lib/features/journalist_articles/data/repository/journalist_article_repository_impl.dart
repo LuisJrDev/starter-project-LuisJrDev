@@ -24,19 +24,33 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
     return _firestoreService.watchArticles();
   }
 
+  DioException _wrapAsDioException(Object e, String path) {
+    return DioException(
+      error: e,
+      requestOptions: RequestOptions(path: path),
+      type: DioExceptionType.unknown,
+    );
+  }
+
+  @override
+  Stream<List<JournalistArticleEntity>> watchMyArticles(String authorId) {
+    return _firestoreService.watchMyArticles(authorId);
+  }
+
+  @override
+  Stream<List<JournalistArticleEntity>> watchMyPublishedArticles(
+    String authorId,
+  ) {
+    return _firestoreService.watchMyPublishedArticles(authorId);
+  }
+
   @override
   Future<DataState<List<JournalistArticleEntity>>> getArticles() async {
     try {
       final models = await _firestoreService.getArticles();
       return DataSuccess(models);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles'));
     }
   }
 
@@ -48,6 +62,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
         title: article.title,
         content: article.content,
         status: article.status,
+        authorId: article.authorId, // <-- NUEVO
         authorName: article.authorName,
         thumbnailPath: article.thumbnailPath,
         category: article.category,
@@ -59,13 +74,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       await _firestoreService.updateArticle(model);
       return const DataSuccess(null);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles/update'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles/update'));
     }
   }
 
@@ -83,13 +92,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
 
       return const DataSuccess(null);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles/delete'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles/delete'));
     }
   }
 
@@ -107,13 +110,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       );
       return DataSuccess(path);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/storage/upload'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/storage/upload'));
     }
   }
 
@@ -125,9 +122,10 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
         title: article.title,
         content: article.content,
         status: article.status,
+        authorId: article.authorId, // <-- NUEVO
         authorName: article.authorName,
-        category: article.category,
         thumbnailPath: article.thumbnailPath,
+        category: article.category,
         publishedAt: article.publishedAt,
         createdAt: article.createdAt,
         updatedAt: article.updatedAt,
@@ -136,13 +134,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       await _firestoreService.createArticle(model);
       return const DataSuccess(null);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles/create'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles/create'));
     }
   }
 
@@ -152,13 +144,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       await _firestoreService.publishArticle(articleId);
       return const DataSuccess(null);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles/publish'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles/publish'));
     }
   }
 
@@ -169,13 +155,7 @@ class JournalistArticleRepositoryImpl implements JournalistArticleRepository {
       final models = await _firestoreService.getPublishedArticles();
       return DataSuccess(models);
     } catch (e) {
-      return DataFailed(
-        DioError(
-          error: e,
-          type: DioErrorType.other,
-          requestOptions: RequestOptions(path: '/articles/published'),
-        ),
-      );
+      return DataFailed(_wrapAsDioException(e, '/articles/published'));
     }
   }
 }

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -49,6 +51,37 @@ class _AddArticlePageState extends State<AddArticlePage> {
   bool _pickingImage = false;
 
   final _formKey = GlobalKey<FormState>();
+
+  Future<void> _loadAuthorFromLoggedUser() async {
+    // Si estás editando un artículo, respeta el autor existente
+    if (widget.editArticle != null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    // 1) fallback rápido
+    final fallback = user?.displayName ?? user?.email ?? 'Unknown';
+
+    if (user == null) {
+      _authorController.text = fallback;
+      return;
+    }
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final data = snap.data();
+      final name = (data?['name'] as String?)?.trim();
+
+      _authorController.text = (name != null && name.isNotEmpty)
+          ? name
+          : fallback;
+    } catch (_) {
+      _authorController.text = fallback;
+    }
+  }
 
   Future<void> _pickThumbnail() async {
     if (_pickingImage) return;
@@ -135,7 +168,6 @@ class _AddArticlePageState extends State<AddArticlePage> {
 
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
-    final author = _authorController.text.trim();
 
     _pendingResult = publishNow
         ? AddArticleResult.published
@@ -148,7 +180,6 @@ class _AddArticlePageState extends State<AddArticlePage> {
         existing: widget.editArticle!,
         title: title,
         content: content,
-        authorName: author,
         thumbnailBytes: _thumbnailBytes, // puede ser null si mantiene imagen
         thumbnailContentType: _thumbnailContentType, // puede ser null
         publishNow: publishNow,
@@ -160,7 +191,6 @@ class _AddArticlePageState extends State<AddArticlePage> {
     context.read<CreateArticleCubit>().submit(
       title: title,
       content: content,
-      authorName: author,
       category: _category,
       thumbnailBytes: _thumbnailBytes!,
       thumbnailContentType: _thumbnailContentType!,
@@ -246,10 +276,10 @@ class _AddArticlePageState extends State<AddArticlePage> {
       _authorController.text = a.authorName;
       _contentController.text = a.content;
       _category = a.category;
-      // thumbnailBytes no lo tienes aquí, solo url.
+    } else {
+      _loadAuthorFromLoggedUser(); // <-- NUEVO
     }
 
-    // Para actualizar progress en tiempo real
     _titleController.addListener(() => setState(() {}));
     _authorController.addListener(() => setState(() {}));
     _contentController.addListener(() => setState(() {}));
@@ -367,24 +397,18 @@ class _AddArticlePageState extends State<AddArticlePage> {
                                 },
                               ),
                               const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _authorController,
-                                maxLength: 40,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: 'Author',
-                                  hintText: 'Public name',
+                              if (editing) ...[
+                                TextFormField(
+                                  controller: _authorController,
+                                  readOnly: true,
+                                  maxLength: 40,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Author',
+                                    hintText: 'Public name',
+                                  ),
                                 ),
-                                validator: (v) {
-                                  final value = (v ?? '').trim();
-                                  if (value.isEmpty)
-                                    return 'Author is required';
-                                  if (value.length < 2)
-                                    return 'Author too short';
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 12),
+                                const SizedBox(height: 12),
+                              ],
                               DropdownButtonFormField<String>(
                                 value: _category,
                                 decoration: const InputDecoration(

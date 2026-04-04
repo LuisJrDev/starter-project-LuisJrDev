@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/data_sources/remote/journalist_firestore_service.dart';
@@ -24,6 +26,22 @@ class CommentsFirestoreSheet extends StatefulWidget {
 class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
   final _controller = TextEditingController();
 
+  Future<String> _resolveAuthorName(User user) async {
+    final fallback = user.displayName ?? user.email ?? 'User';
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final name = (snap.data()?['name'] as String?)?.trim();
+      if (name != null && name.isNotEmpty) return name;
+    } catch (_) {}
+
+    return fallback;
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -34,12 +52,24 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to comment')),
+      );
+      return;
+    }
+
+    final uid = user.uid;
+    final authorName = await _resolveAuthorName(user);
+
     _controller.clear();
 
     await widget.firestore.addComment(
       articleId: widget.article.id,
       deviceId: widget.deviceId,
-      authorName: 'Anonymous',
+      uid: uid, // <-- NUEVO
+      authorName: authorName, // <-- mejor que Anonymous
       text: text,
     );
 
@@ -48,12 +78,15 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final media = MediaQuery.of(context);
+    final bottom = media.viewInsets.bottom + media.viewPadding.bottom;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: bottom),
       child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.75,
+        height: media.size.height * 0.75,
         child: Column(
           children: [
             Padding(
@@ -132,34 +165,38 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
               ),
             ),
             const Divider(height: 1, color: Colors.white12),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Add a comment...',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.06),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
+
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Add a comment...',
+                          hintStyle: const TextStyle(color: Colors.white54),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.06),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
                       ),
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _send,
-                    icon: const Icon(Icons.send, color: Colors.white),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _send,
+                      icon: const Icon(Icons.send, color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -7,7 +8,7 @@ import '../../domain/entities/journalist_article.dart';
 import '../../domain/usecases/delete_article.dart';
 import '../bloc/journalist_article/list/article_list_cubit.dart';
 import '../bloc/journalist_article/list/article_list_state.dart';
-import '../bloc/journalist_article/list/published_article_list_cubit.dart';
+import '../bloc/journalist_article/list/my_published_article_list_cubit.dart';
 import '../../domain/usecases/publish_article.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -59,7 +60,11 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     super.dispose();
   }
 
-  Future<void> _publish(BuildContext innerContext, String articleId) async {
+  Future<void> _publish(
+    BuildContext innerContext,
+    String articleId,
+    String uid,
+  ) async {
     final useCase = sl<PublishJournalistArticleUseCase>();
     final result = await useCase(params: articleId);
 
@@ -73,7 +78,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
       _tabController.animateTo(1);
 
       // IMPORTANTE: usa innerContext (debajo del provider)
-      innerContext.read<PublishedArticleListCubit>().start();
+      innerContext.read<MyPublishedArticleListCubit>().start(uid);
     } else {
       ScaffoldMessenger.of(
         context,
@@ -83,10 +88,17 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const Center(child: Text('Not signed in'));
+    }
+
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => sl<ArticleListCubit>()..start()),
-        BlocProvider(create: (_) => sl<PublishedArticleListCubit>()..start()),
+        BlocProvider(create: (_) => sl<ArticleListCubit>()..start(uid)),
+        BlocProvider(
+          create: (_) => sl<MyPublishedArticleListCubit>()..start(uid),
+        ),
       ],
       child: Builder(
         builder: (innerContext) {
@@ -144,7 +156,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                   children: [
                                     FilledButton.tonal(
                                       onPressed: () =>
-                                          _publish(innerContext, a.id),
+                                          _publish(innerContext, a.id, uid),
                                       child: const Text('Publish'),
                                     ),
                                     const SizedBox(width: 8),
@@ -154,6 +166,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                         innerContext: innerContext,
                                         articleId: a.id,
                                         thumbnailPath: a.thumbnailPath,
+                                        uid: uid,
                                       ),
                                       icon: const Icon(Icons.delete_outline),
                                     ),
@@ -181,7 +194,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                     ),
 
                     // Published
-                    BlocBuilder<PublishedArticleListCubit, ArticleListState>(
+                    BlocBuilder<MyPublishedArticleListCubit, ArticleListState>(
                       builder: (context, state) {
                         if (state is ArticleListLoading) {
                           return const Center(
@@ -219,6 +232,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                     innerContext: innerContext,
                                     articleId: a.id,
                                     thumbnailPath: a.thumbnailPath,
+                                    uid: uid,
                                   ),
                                   icon: const Icon(Icons.delete_outline),
                                 ),
@@ -304,12 +318,13 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
                                   title: s.title,
                                   content: s.content,
                                   status: 'published',
+                                  authorId: 'unknown',
                                   authorName: s.authorName,
                                   thumbnailPath: s.thumbnailPath,
                                   publishedAt: null,
                                   category: s.category,
                                   createdAt: created,
-                                  updatedAt: created, // requerido por tu entity
+                                  updatedAt: created,
                                   likeCount: 0,
                                   commentCount: 0,
                                 );
@@ -364,6 +379,7 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     required BuildContext innerContext,
     required String articleId,
     required String thumbnailPath,
+    required String uid,
   }) async {
     final ok = await _confirmDelete(context);
     if (!ok) return;
@@ -383,9 +399,8 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
       ).showSnackBar(const SnackBar(content: Text('Article deleted')));
 
       // refresca ambas tabs
-      innerContext.read<ArticleListCubit>().start();
-      innerContext.read<PublishedArticleListCubit>().start();
-
+      innerContext.read<ArticleListCubit>().start(uid);
+      innerContext.read<MyPublishedArticleListCubit>().start(uid);
       // si estás en Published y borraste, te quedas; si borraste draft, igual ok
     } else {
       ScaffoldMessenger.of(

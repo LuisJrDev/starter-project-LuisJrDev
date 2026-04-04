@@ -1,15 +1,14 @@
 // lib/features/journalist_articles/presentation/pages/feed/feed_reactions_store.dart
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
-
 import '../../../data/data_sources/remote/journalist_firestore_service.dart';
 
 class FeedReactionsStore extends ChangeNotifier {
   final JournalistFirestoreService _firestore;
   final String _deviceId;
+  final String _uid; // <-- NUEVO
 
-  FeedReactionsStore(this._firestore, this._deviceId);
+  FeedReactionsStore(this._firestore, this._deviceId, this._uid); // <-- NUEVO
 
   final Map<String, bool> _liked = {};
   final Map<String, int> _likeCount = {};
@@ -32,11 +31,7 @@ class FeedReactionsStore extends ChangeNotifier {
     await Future.wait(
       toLoad.map((id) async {
         try {
-          final liked = await _firestore.isLiked(
-            articleId: id,
-            deviceId: _deviceId,
-          );
-          // Si empezó toggle mientras esperábamos, no lo pises
+          final liked = await _firestore.isLiked(articleId: id, uid: _uid);
           if (_loading.contains(id)) return;
           _liked[id] = liked;
         } catch (_) {}
@@ -46,7 +41,6 @@ class FeedReactionsStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set inicial de likeCount desde el modelo (una vez por sesión/pantalla)
   void seedLikeCount(String articleId, int count) {
     _likeCount.putIfAbsent(articleId, () => count);
   }
@@ -58,7 +52,6 @@ class FeedReactionsStore extends ChangeNotifier {
     final wasLiked = _liked[articleId] ?? false;
     _liked[articleId] = !wasLiked;
 
-    // optimistic count
     final current = _likeCount[articleId] ?? 0;
     _likeCount[articleId] = (wasLiked ? (current - 1) : (current + 1)).clamp(
       0,
@@ -68,9 +61,9 @@ class FeedReactionsStore extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _firestore.toggleLike(articleId: articleId, deviceId: _deviceId);
+      await _firestore.toggleLike(articleId: articleId, uid: _uid);
     } catch (e, st) {
-      debugPrint('toggleLike failed for $articleId deviceId=$_deviceId -> $e');
+      debugPrint('toggleLike failed for $articleId uid=$_uid -> $e');
       debugPrint('$st');
 
       _liked[articleId] = wasLiked;

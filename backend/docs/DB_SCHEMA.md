@@ -1,91 +1,179 @@
-# Firestore DB Schema — Applicant Showcase App (Articles)
+# Firestore DB Schema — Journalist Articles
 
-This document defines the NoSQL schema for the **Articles** feature. The goal is to allow authenticated users (journalists) to create articles and upload a thumbnail image to **Firebase Cloud Storage** under `media/articles/`, while storing the article metadata in **Firestore**.
+This document describes the Firestore schema used for the “Journalist Articles” functionality.
 
----
+## Collections overview
 
-## 1) Design goals
-
-- **Fast reads** for the article list screen (title, thumbnail, summary, published date).
-- Support **draft vs published**.
-- Thumbnails are stored in **Cloud Storage**, and Firestore stores a **reference** to them.
-- Keep the schema simple, extensible, and rule-enforceable.
-
----
-
-## 2) Collections overview
-
-### Top-level collections
-- `/articles` — main collection with all article documents.
-
-(Optional for future extensions)
-- `/users` — author profile data (not required for this assignment).
-- `/articles/{articleId}/comments` — if you add comments later.
-
-For this assignment, **only `/articles` is required**.
+- `/articles/{articleId}`
+  - Subcollections:
+    - `/articles/{articleId}/reactions/{uid}`
+    - `/articles/{articleId}/comments/{commentId}`
+- `/users/{uid}`
 
 ---
 
-## 3) Collection: `articles`
+## 1) `articles` collection
 
 ### Path
+
 `/articles/{articleId}`
 
-### Document ID
-- `articleId` can be Firestore auto-id.
-- Recommended: generate it on create, then use it for the thumbnail path.
+### Purpose
 
----
+Stores journalist-authored articles, including drafts and published articles. The feed reads published articles from this collection.
 
-## 4) Article document fields (required + optional)
+### Document fields
 
-Below is the canonical schema. If you add fields, keep them backward compatible.
+| Field | Type | Required | Notes |
 
-### Required fields
-
-| Field | Type | Example | Notes |
-|------|------|---------|------|
-| `title` | `string` | `"How I Learned Flutter in 72 Hours"` | 5–120 chars recommended |
-| `content` | `string` | `"Long form article content..."` | Markdown or plain text is fine |
-| `status` | `string` | `"draft"` / `"published"` | Allowed values: `draft`, `published` |
-| `authorId` | `string` | `"uid_123"` | Firebase Auth `request.auth.uid` |
-| `authorName` | `string` | `"Juan Vides"` | Display name (can be empty but recommended) |
-| `thumbnailPath` | `string` | `"media/articles/abc123/thumbnail.jpg"` | Must be under `media/articles/` in Storage |
-| `createdAt` | `timestamp` | server timestamp | Set on creation (prefer serverTimestamp) |
-| `updatedAt` | `timestamp` | server timestamp | Update on every edit |
-
-### Optional fields (recommended)
-
-| Field | Type | Example | Notes |
-|------|------|---------|------|
-| `subtitle` | `string` | `"A practical roadmap"` | Short summary |
-| `excerpt` | `string` | `"This is what I did day by day..."` | Useful for list cards |
-| `tags` | `array<string>` | `["flutter","firebase"]` | Keep tags lowercase |
-| `publishedAt` | `timestamp` | server timestamp | Only present/used when `status == "published"` |
-| `readingTimeMinutes` | `number` | `6` | Computed client-side ok |
-| `thumbnailUrl` | `string` | `"https://firebasestorage.googleapis.com/..."` | Optional; URL can rotate, so `thumbnailPath` is the source of truth |
-| `language` | `string` | `"es"` | e.g. `en`, `es` |
-| `source` | `string` | `"original"` | e.g. `original`, `imported` |
+|------|------|----------|------|
+| `title` | `string` | ✅ | 5–120 chars |
+| `content` | `string` | ✅ | Markdown text |
+| `status` | `string` | ✅ | `"draft"` or `"published"` |
+| `authorId` | `string` | ✅ | Must match `request.auth.uid` on create/update (author-only) |
+| `authorName` | `string` | ✅ | 2–50 chars; display name shown in UI |
+| `thumbnailPath` | `string` | ✅ | Storage path, must match `media/articles/...` |
+| `category` | `string` | ✅ | One of: `General`, `Sports`, `Technology`, `Business`, `Health`, `Entertainment`, `Politics` |
+| `createdAt` | `timestamp` | ✅ | Creation time (immutable) |
+| `updatedAt` | `timestamp` | ✅ | Updated on edits/likes/comments |
+| `publishedAt` | `timestamp` | optional | Present when published (or null/not set for drafts) |
+| `likeCount` | `number` | ✅ | Counter; non-negative |
+| `commentCount` | `number` | ✅ | Counter; non-negative |
 
 ### Example document
 
 ```json
 {
-  "title": "How I Learned Flutter in 72 Hours",
-  "subtitle": "A practical roadmap",
-  "excerpt": "Here is the plan I followed to ship a clean architecture app fast...",
-  "content": "Full article text...",
+  "title": "Un día de playa: guía para desconectar sin complicarte",
+  "content": "## La playa como pausa...\n\nTexto en Markdown...",
   "status": "published",
-  "authorId": "uid_123",
-  "authorName": "Juan Vides",
-  "tags": ["flutter", "firebase", "clean-architecture"],
-  "thumbnailPath": "media/articles/abc123/thumbnail.jpg",
-  "thumbnailUrl": "https://firebasestorage.googleapis.com/v0/b/.../o/media%2Farticles%2Fabc123%2Fthumbnail.jpg?...",
-  "readingTimeMinutes": 6,
-  "language": "es",
-  "createdAt": "2026-04-02T00:00:00Z",
-  "updatedAt": "2026-04-02T00:10:00Z",
-  "publishedAt": "2026-04-02T00:10:00Z"
+  "authorId": "firebase-auth-uid",
+  "authorName": "Luis Lemus",
+  "thumbnailPath": "media/articles/7c1b.../thumb.jpg",
+  "category": "General",
+  "createdAt": "2026-04-04T12:00:00Z",
+  "updatedAt": "2026-04-04T12:30:00Z",
+  "publishedAt": "2026-04-04T12:10:00Z",
+  "likeCount": 3,
+  "commentCount": 1
 }
-
 ```
+
+---
+
+## 2) `reactions` subcollection (likes)
+
+### Path
+
+`/articles/{articleId}/reactions/{uid}`
+
+### Purpose
+
+Stores a **single like per authenticated user per article**.  
+The document id is the user uid to enforce uniqueness.
+
+### Document fields
+
+| Field | Type | Required | Notes |
+
+|------|------|----------|------|
+| `uid` | `string` | ✅ | Must equal `request.auth.uid` |
+| `type` | `string` | ✅ | `"like"` |
+| `createdAt` | `timestamp` | ✅ | Like timestamp |
+
+### Example
+
+```json
+{
+  "uid": "firebase-auth-uid",
+  "type": "like",
+  "createdAt": "2026-04-04T12:20:00Z"
+}
+```
+
+### Notes
+
+- `likeCount` is stored at the article doc (`/articles/{articleId}.likeCount`) and updated via transaction whenever a reaction is created/deleted.
+
+---
+
+## 3) `comments` subcollection
+
+### Path
+
+`/articles/{articleId}/comments/{commentId}`
+
+### Purpose
+
+Stores comments for an article.
+
+### Document fields
+
+| Field | Type | Required | Notes |
+
+|------|------|----------|------|
+| `uid` | `string` | ✅ | Must equal `request.auth.uid` |
+| `deviceId` | `string` | ✅ | Local device identifier (non-PII) used by client |
+| `authorName` | `string` | ✅ | Displayed in UI |
+| `text` | `string` | ✅ | 1–500 chars |
+| `createdAt` | `timestamp` | ✅ | Comment timestamp |
+
+### Example
+
+```json
+{
+  "uid": "firebase-auth-uid",
+  "deviceId": "local-device-id",
+  "authorName": "Zharick Galindo",
+  "text": "Muy buen artículo, gracias por compartir.",
+  "createdAt": "2026-04-04T12:25:00Z"
+}
+```
+
+### Notes
+
+- `commentCount` is stored at the article doc (`/articles/{articleId}.commentCount`) and incremented via transaction when a comment is created.
+
+---
+
+## 4) `users` collection (profiles)
+
+### Path
+
+`/users/{uid}`
+
+### Purpose
+
+Stores user profile fields used by the app (e.g. display name).
+
+### Example
+
+```json
+{
+  "name": "Luis Lemus",
+  "email": "luis@example.com",
+  "createdAt": "2026-04-04T11:00:00Z"
+}
+```
+
+### Notes
+
+- Access is restricted so users can only read/write their own profile document.
+
+---
+
+## Storage schema (thumbnails)
+
+### Path
+
+`/media/articles/{...}`
+
+### Purpose
+
+Stores uploaded thumbnail images for articles.
+
+### Notes
+
+- Firestore stores a reference to the storage path in `articles.thumbnailPath`.
+
+- Example: `media/articles/7c1b.../thumb.jpg`

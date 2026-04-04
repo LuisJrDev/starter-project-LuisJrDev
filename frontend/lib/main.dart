@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'config/routes/routes.dart';
 import 'config/theme/app_themes.dart';
-import 'features/journalist_articles/presentation/pages/app_shell/app_shell_page.dart';
+import 'features/auth/presentation/cubit/auth_cubit.dart';
+import 'features/auth/presentation/pages/auth_gate.dart';
 import 'firebase_options.dart';
 import 'injection_container.dart';
 
@@ -27,6 +30,7 @@ Future<void> connectToEmulators() async {
 
   FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
   FirebaseStorage.instance.useStorageEmulator(host, 9199);
+  FirebaseAuth.instance.useAuthEmulator(host, 9099);
 
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: false,
@@ -38,14 +42,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: theme(),
-      darkTheme: darkTheme(),
-      themeMode: ThemeMode
-          .dark, // <--- para que se vea moderno y consistente con tu feed
-      onGenerateRoute: AppRoutes.onGenerateRoutes,
-      home: const AppShellPage(),
+    return BlocProvider<AuthCubit>(
+      create: (_) => sl<AuthCubit>()..start(),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: theme(),
+        darkTheme: darkTheme(),
+        themeMode: ThemeMode.dark,
+        onGenerateRoute: AppRoutes.onGenerateRoutes,
+        home: const AuthGate(),
+      ),
     );
   }
 }

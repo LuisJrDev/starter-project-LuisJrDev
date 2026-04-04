@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/resources/data_state.dart';
@@ -104,6 +105,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final createdLabel = timeAgo(created);
     final minutes = _readingMinutes(widget.article.content);
     final (bg, fg, muted) = _palette(context);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final canDelete = uid != null && uid == widget.article.authorId;
 
     return Theme(
       // Tema local para modo lectura
@@ -170,54 +173,55 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                         );
                       },
                     ),
-                    IconButton(
-                      tooltip: 'Delete',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Delete article?'),
-                            content: const Text(
-                              'This action cannot be undone.',
+                    if (canDelete)
+                      IconButton(
+                        tooltip: 'Delete',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete article?'),
+                              content: const Text(
+                                'This action cannot be undone.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (ok != true || !context.mounted) return;
-
-                        final useCase = sl<DeleteJournalistArticleUseCase>();
-                        final res = await useCase(
-                          params: DeleteArticleParams(
-                            articleId: widget.article.id,
-                            thumbnailPath: widget.article.thumbnailPath,
-                          ),
-                        );
-
-                        if (!context.mounted) return;
-
-                        if (res is DataSuccess) {
-                          Navigator.of(context).pop('deleted');
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Article deleted')),
                           );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to delete')),
+
+                          if (ok != true || !context.mounted) return;
+
+                          final useCase = sl<DeleteJournalistArticleUseCase>();
+                          final res = await useCase(
+                            params: DeleteArticleParams(
+                              articleId: widget.article.id,
+                              thumbnailPath: widget.article.thumbnailPath,
+                            ),
                           );
-                        }
-                      },
-                    ),
+
+                          if (!context.mounted) return;
+
+                          if (res is DataSuccess) {
+                            Navigator.of(context).pop('deleted');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Article deleted')),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Failed to delete')),
+                            );
+                          }
+                        },
+                      ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(

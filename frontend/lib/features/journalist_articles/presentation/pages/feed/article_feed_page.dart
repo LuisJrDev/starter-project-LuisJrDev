@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,7 +47,9 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
     _deviceIdService = sl<DeviceIdService>();
     _firestore = sl<JournalistFirestoreService>();
     _deviceId = _deviceIdService.getOrCreate();
-    _reactions = FeedReactionsStore(_firestore, _deviceId);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {}
+    _reactions = FeedReactionsStore(_firestore, _deviceId, uid!);
   }
 
   void scrollToTop() {
@@ -238,8 +241,10 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
                       onSearch: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) =>
-                                ArticleSearchPage(saved: widget.saved),
+                            builder: (_) => ArticleSearchPage(
+                              saved: widget.saved,
+                              reactions: _reactions,
+                            ),
                           ),
                         );
                       },

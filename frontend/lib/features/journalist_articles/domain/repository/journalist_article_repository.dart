@@ -16,6 +16,11 @@ abstract class JournalistArticleRepository {
 
   Stream<List<JournalistArticleEntity>> watchArticles();
 
+  Stream<List<JournalistArticleEntity>> watchMyArticles(String authorId);
+  Stream<List<JournalistArticleEntity>> watchMyPublishedArticles(
+    String authorId,
+  );
+
   Future<DataState<void>> createArticle(JournalistArticleEntity article);
 
   Future<DataState<void>> updateArticle(JournalistArticleEntity article);
