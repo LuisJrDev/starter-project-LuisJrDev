@@ -1,49 +1,70 @@
 # Firebase Firestore Backend
-In this folder are all the [Firebase Firestore](https://firebase.google.com/docs/firestore) related files. 
-You will use this folder to add the schema of the *Articles* you want to upload for the app and to add the rules that enforce this schema. 
 
-## DB Schema
-**TODO: ADD YOUR DB SCHEMA (SCHEMA FOR "ARTICLES" AND ANY OTHER SCHEMAS) HERE**
+En esta carpeta están los archivos de configuración del backend de Firebase usados por la app:
+
+- Reglas de **Firestore**: `firestore.rules`
+- Reglas de **Storage**: `storage.rules`
+- Configuración de **Emuladores**: `firebase.json`
+- Índices de **Firestore**: `firestore.indexes.json`
+- Documentación del **schema**: `docs/DB_SCHEMA.md`
+
+---
+
+## DB Schema (Firestore)
+
+La estructura de la base de datos para la funcionalidad de “Journalist Articles” está documentada aquí:
+
+- `backend/docs/DB_SCHEMA.md`
+
+Incluye:
+- `/articles/{articleId}`
+- Subcolecciones: `/reactions/{uid}` y `/comments/{commentId}`
+- `/users/{uid}`
+- Storage: `media/articles/{articleId}/thumbnail.jpg`
+
+---
 
 ## Getting Started
-Before starting to work on the backend, you must have a Firebase project with the [Firebase Firestore](https://firebase.google.com/docs/firestore), [Firebase Cloud Storage](https://firebase.google.com/docs/storage) and [Firebase Local Emulator Suite](https://firebase.google.com/docs/emulator-suite) technologies enabled.
-To do this, create a project but enable only Firebase Cloud Storage, Firebase Firestore, and Firebase Local Emulator Suite technologies.
 
+Antes de trabajar el backend, asegúrate de tener un proyecto Firebase con:
+- Firestore
+- Storage
+- Emulator Suite
 
-## Deploying the Project
-In order to deploy the Firestore rules from this repository to the [Firebase console](https://firebase.google.com/)  of your project, follow these steps:
+---
 
-### 1. Install firebase CLI
-```
+## Deploying (Firestore + Storage rules)
+
+### 1) Install Firebase CLI
+```bash
 npm install -g firebase-tools
 ```
-### 2. Login to your account
-```
+
+### 2) Login
+```bash
 firebase login
 ```
 
-### 3. Add your project id to the .firebasesrc file 
-This corresponds to the project Id of the firebase project you created in the Firebase web-app.
-[Change project id](.firebaserc)
+### 3) Set project id
+Edita `.firebaserc` con el Project ID de tu proyecto Firebase.
 
-### 4. Initialize the project
-```
-firebase init
-```
-
-You should leave everything as it is, choose:
-- emulators
-- firestore
-- cloud storage
-
-### 5. Deploy to firebase
-```
+### 4) Deploy
+```bash
 firebase deploy
 ```
-This will deploy all the rules you write in `firestore.rules` to your Firebase Firestore project.
-Be careful becasuse it will overwrite the existing firestore.rules file of your project.
 
-## Running the project in a local emulator
-To run the application locally, use the following command:
+> Nota: este comando despliega reglas de Firestore/Storage y cualquier configuración declarada en `firebase.json`.
 
-```firebase emulators:start```
+---
+
+## Running locally (Emulator Suite)
+
+```bash
+firebase emulators:start
+```
+
+Puertos (según `firebase.json`):
+- Firestore: `8080`
+- Auth: `9099`
+- Storage: `9199`
+- Emulator UI: habilitado

@@ -15,33 +15,29 @@ This document describes the Firestore schema used for the “Journalist Articles
 ## 1) `articles` collection
 
 ### Path
-
 `/articles/{articleId}`
 
 ### Purpose
-
 Stores journalist-authored articles, including drafts and published articles. The feed reads published articles from this collection.
 
 ### Document fields
 
 | Field | Type | Required | Notes |
-
 |------|------|----------|------|
 | `title` | `string` | ✅ | 5–120 chars |
 | `content` | `string` | ✅ | Markdown text |
 | `status` | `string` | ✅ | `"draft"` or `"published"` |
 | `authorId` | `string` | ✅ | Must match `request.auth.uid` on create/update (author-only) |
 | `authorName` | `string` | ✅ | 2–50 chars; display name shown in UI |
-| `thumbnailPath` | `string` | ✅ | Storage path, must match `media/articles/...` |
+| `thumbnailPath` | `string` | ✅ | Storage path. App uses `media/articles/{articleId}/thumbnail.jpg` |
 | `category` | `string` | ✅ | One of: `General`, `Sports`, `Technology`, `Business`, `Health`, `Entertainment`, `Politics` |
 | `createdAt` | `timestamp` | ✅ | Creation time (immutable) |
 | `updatedAt` | `timestamp` | ✅ | Updated on edits/likes/comments |
-| `publishedAt` | `timestamp` | optional | Present when published (or null/not set for drafts) |
+| `publishedAt` | `timestamp` | optional | Present only when published (may be omitted for drafts) |
 | `likeCount` | `number` | ✅ | Counter; non-negative |
 | `commentCount` | `number` | ✅ | Counter; non-negative |
 
 ### Example document
-
 ```json
 {
   "title": "Un día de playa: guía para desconectar sin complicarte",
@@ -49,7 +45,7 @@ Stores journalist-authored articles, including drafts and published articles. Th
   "status": "published",
   "authorId": "firebase-auth-uid",
   "authorName": "Luis Lemus",
-  "thumbnailPath": "media/articles/7c1b.../thumb.jpg",
+  "thumbnailPath": "media/articles/7c1b.../thumbnail.jpg",
   "category": "General",
   "createdAt": "2026-04-04T12:00:00Z",
   "updatedAt": "2026-04-04T12:30:00Z",
@@ -64,53 +60,36 @@ Stores journalist-authored articles, including drafts and published articles. Th
 ## 2) `reactions` subcollection (likes)
 
 ### Path
-
 `/articles/{articleId}/reactions/{uid}`
 
 ### Purpose
-
 Stores a **single like per authenticated user per article**.  
 The document id is the user uid to enforce uniqueness.
 
 ### Document fields
 
 | Field | Type | Required | Notes |
-
 |------|------|----------|------|
 | `uid` | `string` | ✅ | Must equal `request.auth.uid` |
 | `type` | `string` | ✅ | `"like"` |
 | `createdAt` | `timestamp` | ✅ | Like timestamp |
 
-### Example
-
-```json
-{
-  "uid": "firebase-auth-uid",
-  "type": "like",
-  "createdAt": "2026-04-04T12:20:00Z"
-}
-```
-
 ### Notes
-
-- `likeCount` is stored at the article doc (`/articles/{articleId}.likeCount`) and updated via transaction whenever a reaction is created/deleted.
+- `likeCount` is stored at `/articles/{articleId}.likeCount` and updated via transaction whenever a reaction is created/deleted.
 
 ---
 
 ## 3) `comments` subcollection
 
 ### Path
-
 `/articles/{articleId}/comments/{commentId}`
 
 ### Purpose
-
 Stores comments for an article.
 
 ### Document fields
 
 | Field | Type | Required | Notes |
-
 |------|------|----------|------|
 | `uid` | `string` | ✅ | Must equal `request.auth.uid` |
 | `deviceId` | `string` | ✅ | Local device identifier (non-PII) used by client |
@@ -118,46 +97,30 @@ Stores comments for an article.
 | `text` | `string` | ✅ | 1–500 chars |
 | `createdAt` | `timestamp` | ✅ | Comment timestamp |
 
-### Example
-
-```json
-{
-  "uid": "firebase-auth-uid",
-  "deviceId": "local-device-id",
-  "authorName": "Zharick Galindo",
-  "text": "Muy buen artículo, gracias por compartir.",
-  "createdAt": "2026-04-04T12:25:00Z"
-}
-```
-
 ### Notes
-
-- `commentCount` is stored at the article doc (`/articles/{articleId}.commentCount`) and incremented via transaction when a comment is created.
+- `commentCount` is stored at `/articles/{articleId}.commentCount` and incremented via transaction when a comment is created.
 
 ---
 
 ## 4) `users` collection (profiles)
 
 ### Path
-
 `/users/{uid}`
 
 ### Purpose
-
 Stores user profile fields used by the app (e.g. display name).
 
-### Example
+### Document fields (as used by the app)
 
-```json
-{
-  "name": "Luis Lemus",
-  "email": "luis@example.com",
-  "createdAt": "2026-04-04T11:00:00Z"
-}
-```
+| Field | Type | Required | Notes |
+|------|------|----------|------|
+| `uid` | `string` | ✅ | Should match document id and `request.auth.uid` |
+| `email` | `string` | ✅ | Stored for convenience |
+| `name` | `string` | ✅ | Display name |
+| `createdAt` | `timestamp` | ✅ | Server timestamp |
+| `updatedAt` | `timestamp` | ✅ | Server timestamp |
 
 ### Notes
-
 - Access is restricted so users can only read/write their own profile document.
 
 ---
@@ -165,15 +128,10 @@ Stores user profile fields used by the app (e.g. display name).
 ## Storage schema (thumbnails)
 
 ### Path
-
-`/media/articles/{...}`
+`/media/articles/{articleId}/thumbnail.jpg`
 
 ### Purpose
-
 Stores uploaded thumbnail images for articles.
 
 ### Notes
-
 - Firestore stores a reference to the storage path in `articles.thumbnailPath`.
-
-- Example: `media/articles/7c1b.../thumb.jpg`

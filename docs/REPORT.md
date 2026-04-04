@@ -92,37 +92,43 @@ If I had more time, I would add:
 - A stronger Storage rules policy (auth-only uploads + path restrictions per user/article)
 
 ---
-
 ## 5) Proof of the Project (Screenshots / Videos)
 
-> Replace the placeholders below with real screenshots and/or short recordings (GIF/MP4).  
-> The goal is to make it easy for reviewers to verify core flows quickly.
-
 ### Auth flow
-- Sign up / sign in screens:
-  - Screenshot: `./assets/report/auth_signup.png`
-  - Screenshot: `./assets/report/auth_signin.png`
+**Sign up**
+![Sign up](./assets/report/01_auth_signup.png)
+
+**Sign in**
+![Sign in](./assets/report/02_auth_signin.png)
 
 ### Article creation & publishing
-- Create draft + upload thumbnail:
-  - Screenshot: `./assets/report/article_create.png`
-- Draft list and publish action:
-  - Screenshot: `./assets/report/my_articles_drafts.png`
-- Published list in profile:
-  - Screenshot: `./assets/report/my_articles_published.png`
+**Create draft**
+![Create draft](./assets/report/03_create_draft.png)
+
+**My drafts**
+![My drafts](./assets/report/04_my_drafts.png)
+
+**Publish success**
+![Publish success](./assets/report/05_publish_success.png)
 
 ### Global feed + interactions
-- Global feed:
-  - Screenshot: `./assets/report/feed.png`
-- Like animation / like count:
-  - Screenshot: `./assets/report/feed_like.png`
-- Comments bottom sheet:
-  - Screenshot: `./assets/report/comments_sheet.png`
+**Feed**
+![Feed](./assets/report/06_feed.png)
 
-### Short demo video (recommended)
-- Video: `./assets/report/demo.mp4`
-  - Includes: sign in → create draft → publish → view in feed → like/comment → log into another account → like state is independent.
+**Like state - User A**
+![Like user A](./assets/report/07_like_user_a.png)
 
+**Like state - User B**
+![Like user B](./assets/report/08_like_user_b.png)
+
+**Comments bottom sheet**
+![Comments](./assets/report/09_comments_sheet.png)
+
+**Article detail**
+![Article detail](./assets/report/10_article_detail.png)
+
+### Demo video
+[Demo video](https://youtu.be/jyNTkjHc3RI)
 ---
 
 ## 6) Overdelivery

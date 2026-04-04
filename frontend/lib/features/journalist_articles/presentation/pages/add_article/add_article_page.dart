@@ -1,7 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,7 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../../core/constants/article_categories.dart';
 import '../../../../../core/widgets/app_loading_overlay.dart';
 import '../../../../../core/widgets/app_toast.dart';
+import '../../../../../injection_container.dart';
 import '../../../domain/entities/journalist_article.dart';
+import '../../../domain/usecases/resolve_author_name.dart';
 import '../../bloc/journalist_article/create/create_article_cubit.dart';
 import '../../bloc/journalist_article/create/create_article_state.dart';
 
@@ -52,34 +53,6 @@ class _AddArticlePageState extends State<AddArticlePage> {
   bool _pickingImage = false;
 
   final _formKey = GlobalKey<FormState>();
-
-  Future<void> _loadAuthorFromLoggedUser() async {
-    if (widget.editArticle != null) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-    final fallback = user?.displayName ?? user?.email ?? 'Usuario';
-
-    if (user == null) {
-      _authorController.text = fallback;
-      return;
-    }
-
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      final data = snap.data();
-      final name = (data?['name'] as String?)?.trim();
-
-      _authorController.text = (name != null && name.isNotEmpty)
-          ? name
-          : fallback;
-    } catch (_) {
-      _authorController.text = fallback;
-    }
-  }
 
   Future<void> _pickThumbnail() async {
     if (_pickingImage) return;
@@ -265,7 +238,13 @@ class _AddArticlePageState extends State<AddArticlePage> {
       _contentController.text = a.content;
       _category = a.category;
     } else {
-      _loadAuthorFromLoggedUser();
+      unawaited(() async {
+        try {
+          final (_, authorName) = await sl<ResolveAuthorNameUseCase>()();
+          if (!mounted) return;
+          _authorController.text = authorName;
+        } catch (_) {}
+      }());
     }
 
     _titleController.addListener(() => setState(() {}));

@@ -1,14 +1,13 @@
 import 'dart:typed_data';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../../core/resources/data_state.dart';
-import '../../../../../auth/data/data_sources/remote/user_profile_firestore_service.dart';
 import '../../../../domain/entities/journalist_article.dart';
 import '../../../../domain/usecases/create_article.dart';
 import '../../../../domain/usecases/new_article_id.dart';
 import '../../../../domain/usecases/publish_article.dart';
+import '../../../../domain/usecases/resolve_author_name.dart';
 import '../../../../domain/usecases/update_article.dart';
 import '../../../../domain/usecases/upload_thumbnail.dart';
 import 'create_article_state.dart';
@@ -19,9 +18,7 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
   final CreateJournalistArticleUseCase _createArticle;
   final UpdateJournalistArticleUseCase _updateArticle;
   final PublishJournalistArticleUseCase _publishArticle;
-
-  final FirebaseAuth _auth;
-  final UserProfileFirestoreService _profile;
+  final ResolveAuthorNameUseCase _resolveAuthorName;
 
   CreateArticleCubit(
     this._newId,
@@ -29,25 +26,8 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     this._createArticle,
     this._updateArticle,
     this._publishArticle,
-    this._auth,
-    this._profile,
+    this._resolveAuthorName,
   ) : super(const CreateArticleInitial());
-
-  Future<(String uid, String authorName)> _getAuthor() async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
-
-    final fallback = user.displayName ?? user.email ?? 'Unknown';
-
-    try {
-      final data = await _profile.getUserProfile(user.uid);
-      final name = (data?['name'] as String?)?.trim();
-      final authorName = (name != null && name.isNotEmpty) ? name : fallback;
-      return (user.uid, authorName);
-    } catch (_) {
-      return (user.uid, fallback);
-    }
-  }
 
   Future<void> submit({
     required String title,
@@ -60,22 +40,15 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     emit(const CreateArticleLoading());
 
     try {
-      final (authorId, authorName) = await _getAuthor();
+      final (authorId, authorName) = await _resolveAuthorName();
 
       final articleId = _newId();
 
-      final uploadState = await _uploadThumbnail(
-        params: UploadThumbnailParams(
-          articleId: articleId,
-          bytes: thumbnailBytes,
-          contentType: thumbnailContentType,
-        ),
+      final thumbnailPath = await _uploadThumbnailOrThrow(
+        articleId: articleId,
+        bytes: thumbnailBytes,
+        contentType: thumbnailContentType,
       );
-
-      if (uploadState is DataFailed || uploadState.data == null) {
-        emit(const CreateArticleError('Thumbnail upload failed'));
-        return;
-      }
 
       final now = DateTime.now();
 
@@ -86,7 +59,7 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
         status: 'draft',
         authorId: authorId,
         authorName: authorName,
-        thumbnailPath: uploadState.data!,
+        thumbnailPath: thumbnailPath,
         category: category,
         publishedAt: null,
         likeCount: 0,
@@ -95,23 +68,15 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
         updatedAt: now,
       );
 
-      final createState = await _createArticle(params: entity);
-      if (createState is DataFailed) {
-        emit(const CreateArticleError('Firestore create failed'));
-        return;
-      }
+      await _createArticleOrThrow(entity);
 
       if (publishNow) {
-        final pubState = await _publishArticle(params: articleId);
-        if (pubState is DataFailed) {
-          emit(const CreateArticleError('Publish failed'));
-          return;
-        }
+        await _publishArticleOrThrow(articleId);
       }
 
       emit(CreateArticleSuccess(articleId));
     } catch (e) {
-      emit(CreateArticleError(e.toString()));
+      emit(CreateArticleError(_toMessage(e)));
     }
   }
 
@@ -126,61 +91,94 @@ class CreateArticleCubit extends Cubit<CreateArticleState> {
     emit(const CreateArticleLoading());
 
     try {
-      final authorId = existing.authorId;
-      final authorName = existing.authorName;
+      final nextThumbnailPath = await _maybeUploadNewThumbnail(
+        articleId: existing.id,
+        existingThumbnailPath: existing.thumbnailPath,
+        bytes: thumbnailBytes,
+        contentType: thumbnailContentType,
+      );
 
-      var thumbnailPath = existing.thumbnailPath;
-
-      if (thumbnailBytes != null && thumbnailContentType != null) {
-        final uploadState = await _uploadThumbnail(
-          params: UploadThumbnailParams(
-            articleId: existing.id,
-            bytes: thumbnailBytes,
-            contentType: thumbnailContentType,
-          ),
-        );
-
-        if (uploadState is DataFailed || uploadState.data == null) {
-          emit(const CreateArticleError('Thumbnail upload failed'));
-          return;
-        }
-
-        thumbnailPath = uploadState.data!;
-      }
-
-      final updated = JournalistArticleEntity(
-        id: existing.id,
+      final updated = existing.copyWith(
         title: title.trim(),
         content: content.trim(),
-        status: existing.status,
-        authorId: authorId,
-        authorName: authorName,
-        thumbnailPath: thumbnailPath,
-        publishedAt: existing.publishedAt,
-        category: existing.category,
-        likeCount: existing.likeCount,
-        commentCount: existing.commentCount,
-        createdAt: existing.createdAt,
+        thumbnailPath: nextThumbnailPath,
         updatedAt: DateTime.now(),
       );
 
-      final updateState = await _updateArticle(params: updated);
-      if (updateState is DataFailed) {
-        emit(const CreateArticleError('Firestore update failed'));
-        return;
-      }
+      await _updateArticleOrThrow(updated);
 
       if (publishNow) {
-        final pubState = await _publishArticle(params: existing.id);
-        if (pubState is DataFailed) {
-          emit(const CreateArticleError('Publish failed'));
-          return;
-        }
+        await _publishArticleOrThrow(existing.id);
       }
 
       emit(CreateArticleSuccess(existing.id));
     } catch (e) {
-      emit(CreateArticleError(e.toString()));
+      emit(CreateArticleError(_toMessage(e)));
     }
+  }
+
+  // -------------------------
+  // Helpers (small + SRP)
+  // -------------------------
+
+  Future<String> _uploadThumbnailOrThrow({
+    required String articleId,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final res = await _uploadThumbnail(
+      params: UploadThumbnailParams(
+        articleId: articleId,
+        bytes: bytes,
+        contentType: contentType,
+      ),
+    );
+
+    if (res is DataFailed || res.data == null) {
+      throw Exception('Thumbnail upload failed');
+    }
+
+    return res.data!;
+  }
+
+  Future<String> _maybeUploadNewThumbnail({
+    required String articleId,
+    required String existingThumbnailPath,
+    required Uint8List? bytes,
+    required String? contentType,
+  }) async {
+    final shouldUpload = bytes != null && contentType != null;
+    if (!shouldUpload) return existingThumbnailPath;
+
+    return _uploadThumbnailOrThrow(
+      articleId: articleId,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
+
+  Future<void> _createArticleOrThrow(JournalistArticleEntity entity) async {
+    final res = await _createArticle(params: entity);
+    if (res is DataFailed) throw Exception('Firestore create failed');
+  }
+
+  Future<void> _updateArticleOrThrow(JournalistArticleEntity entity) async {
+    final res = await _updateArticle(params: entity);
+    if (res is DataFailed) throw Exception('Firestore update failed');
+  }
+
+  Future<void> _publishArticleOrThrow(String articleId) async {
+    final res = await _publishArticle(params: articleId);
+    if (res is DataFailed) throw Exception('Publish failed');
+  }
+
+  String _toMessage(Object e) {
+    final s = e.toString();
+    // Mantén mensajes cortos y consistentes para UI
+    if (s.contains('Thumbnail upload failed')) return 'Thumbnail upload failed';
+    if (s.contains('Firestore create failed')) return 'Firestore create failed';
+    if (s.contains('Firestore update failed')) return 'Firestore update failed';
+    if (s.contains('Publish failed')) return 'Publish failed';
+    return s;
   }
 }

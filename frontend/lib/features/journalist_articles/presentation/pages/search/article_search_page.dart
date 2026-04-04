@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../../core/widgets/app_toast.dart';
+import '../../../../../injection_container.dart';
 import '../../../domain/entities/journalist_article.dart';
+import '../../../domain/usecases/get_download_url.dart';
 import '../../controllers/saved_articles_controller.dart';
 import '../article_detail/article_detail_page.dart';
 import '../feed/feed_reactions_store.dart';
@@ -31,15 +32,19 @@ class ArticleSearchPage extends StatefulWidget {
 class _ArticleSearchPageState extends State<ArticleSearchPage> {
   final _controller = TextEditingController();
   String _q = '';
+  late final GetDownloadUrlUseCase _getUrl;
 
   final Map<String, Future<String>> _urlFutures = {};
   List<String> _primedIds = const [];
 
+  @override
+  void initState() {
+    super.initState();
+    _getUrl = sl<GetDownloadUrlUseCase>();
+  }
+
   Future<String> _getDownloadUrlCached(String path) {
-    return _urlFutures.putIfAbsent(
-      path,
-      () => FirebaseStorage.instance.ref(path).getDownloadURL(),
-    );
+    return _urlFutures.putIfAbsent(path, () => _getUrl(path));
   }
 
   bool _matches(JournalistArticleEntity a, String q) {

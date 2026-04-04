@@ -1,8 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../../injection_container.dart';
 import '../../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../domain/usecases/get_current_user.dart';
 import '../../controllers/saved_articles_controller.dart';
 import '../../widgets/my_articles_section.dart';
 
@@ -38,9 +39,8 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final name = user?.displayName ?? user?.email ?? 'Usuario';
-
+    final me = sl<GetCurrentUserUseCase>()();
+    final name = me?.displayName ?? me?.email ?? 'Usuario';
     return Scaffold(
       appBar: AppBar(
         title: const Text('Perfil'),

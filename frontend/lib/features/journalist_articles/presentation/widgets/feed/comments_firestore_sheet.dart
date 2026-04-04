@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/widgets/app_loading_overlay.dart';
 import '../../../../../core/widgets/app_toast.dart';
+import '../../../../../injection_container.dart';
 import '../../../domain/entities/journalist_article.dart';
 import '../../../domain/usecases/add_comment.dart';
+import '../../../domain/usecases/resolve_author_name.dart';
 import '../../../domain/usecases/watch_comments.dart';
 
 class CommentsFirestoreSheet extends StatefulWidget {
@@ -34,22 +34,6 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
   final _controller = TextEditingController();
   bool _sending = false;
 
-  Future<String> _resolveAuthorName(User user) async {
-    final fallback = user.displayName ?? user.email ?? 'Usuario';
-
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      final name = (snap.data()?['name'] as String?)?.trim();
-      if (name != null && name.isNotEmpty) return name;
-    } catch (_) {}
-
-    return fallback;
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -62,20 +46,14 @@ class _CommentsFirestoreSheetState extends State<CommentsFirestoreSheet> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      AppToast.showError(context, 'Inicia sesión para comentar.');
-      return;
-    }
-
     _sending = true;
     FocusManager.instance.primaryFocus?.unfocus();
 
     AppLoadingOverlay.show(context, message: 'Enviando comentario…');
 
     try {
-      final uid = user.uid;
-      final authorName = await _resolveAuthorName(user);
+      final resolveAuthor = sl<ResolveAuthorNameUseCase>();
+      final (uid, authorName) = await resolveAuthor();
 
       _controller.clear();
 

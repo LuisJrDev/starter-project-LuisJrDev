@@ -53,17 +53,20 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(["likeCount", "updatedAt"])
         && request.resource.data.likeCount is number
         && request.resource.data.likeCount >= 0
-        && request.resource.data.updatedAt is timestamp;
+        && request.resource.data.updatedAt is timestamp
+        && (request.resource.data.likeCount == resource.data.likeCount + 1
+            || request.resource.data.likeCount == resource.data.likeCount - 1);
     }
-    
+
     function isCommentCountUpdate() {
       return request.auth != null
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(["commentCount", "updatedAt"])
         && request.resource.data.commentCount is number
         && request.resource.data.commentCount >= 0
-        && request.resource.data.updatedAt is timestamp;
+        && request.resource.data.updatedAt is timestamp
+        && (request.resource.data.commentCount == resource.data.commentCount + 1);
     }
-    
+
     match /articles/{articleId} {
       allow get, list: if true;
 
@@ -110,7 +113,6 @@ service cloud.firestore {
           && request.resource.data.text.size() <= 500
           && request.resource.data.createdAt is timestamp;
 
-        // delete solo el dueño del comment
         allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
 
         allow update: if false;
@@ -118,14 +120,12 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // Solo el usuario autenticado puede leer/escribir su propio perfil
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if request.auth != null && request.auth.uid == uid;
       allow update: if request.auth != null && request.auth.uid == uid;
       allow delete: if false;
     }
 
-    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

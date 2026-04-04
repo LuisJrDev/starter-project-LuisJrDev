@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:share_plus/share_plus.dart';
@@ -12,6 +10,8 @@ import '../../../../../core/widgets/app_toast.dart';
 import '../../../../../injection_container.dart';
 import '../../../domain/entities/journalist_article.dart';
 import '../../../domain/usecases/add_comment.dart';
+import '../../../domain/usecases/get_current_user.dart';
+import '../../../domain/usecases/get_download_url.dart';
 import '../../../domain/usecases/is_liked.dart';
 import '../../../domain/usecases/toggle_like.dart';
 import '../../../domain/usecases/watch_comments.dart';
@@ -39,6 +39,7 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
   late final FeedReactionsStore _reactions;
   late final DeviceIdService _deviceIdService;
   late final String _deviceId;
+  late final GetDownloadUrlUseCase _getUrl;
 
   final Map<String, Future<String>> _urlFutures = {};
 
@@ -48,8 +49,10 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
     _cubit = sl<PublishedArticleListCubit>()..start();
     _deviceIdService = sl<DeviceIdService>();
     _deviceId = _deviceIdService.getOrCreate();
+    _getUrl = sl<GetDownloadUrlUseCase>();
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final me = sl<GetCurrentUserUseCase>()();
+    final uid = me?.uid;
     if (uid == null) {
       // En teoría no pasa porque AuthGate no deja entrar,
       // pero por seguridad evitamos crash.
@@ -85,10 +88,7 @@ class ArticleFeedPageState extends State<ArticleFeedPage> {
   }
 
   Future<String> _getDownloadUrlCached(String path) {
-    return _urlFutures.putIfAbsent(
-      path,
-      () => FirebaseStorage.instance.ref(path).getDownloadURL(),
-    );
+    return _urlFutures.putIfAbsent(path, () => _getUrl(path));
   }
 
   Future<void> _prefetchNextImage(

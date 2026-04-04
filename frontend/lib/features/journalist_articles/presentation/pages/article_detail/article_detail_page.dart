@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/resources/data_state.dart';
@@ -11,6 +10,7 @@ import '../../../../../injection_container.dart';
 import '../../../data/data_sources/local/saved_articles_local_store.dart';
 import '../../../domain/entities/journalist_article.dart';
 import '../../../domain/usecases/delete_article.dart';
+import '../../../domain/usecases/get_current_user.dart';
 import '../../controllers/saved_articles_controller.dart';
 import 'reader_settings.dart';
 
@@ -178,7 +178,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final createdLabel = timeAgo(created);
     final minutes = _readingMinutes(widget.article.content);
     final (bg, fg, muted) = _palette(context);
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final me = sl<GetCurrentUserUseCase>()();
+    final uid = me?.uid;
     final canDelete = uid != null && uid == widget.article.authorId;
 
     return Theme(

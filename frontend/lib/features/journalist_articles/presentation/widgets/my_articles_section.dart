@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -8,6 +7,8 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../../../injection_container.dart';
 import '../../domain/entities/journalist_article.dart';
 import '../../domain/usecases/delete_article.dart';
+import '../../domain/usecases/get_current_user.dart';
+import '../../domain/usecases/get_download_url.dart';
 import '../../domain/usecases/publish_article.dart';
 import '../bloc/journalist_article/create/create_article_cubit.dart';
 import '../bloc/journalist_article/list/article_list_cubit.dart';
@@ -15,7 +16,6 @@ import '../bloc/journalist_article/list/article_list_state.dart';
 import '../bloc/journalist_article/list/my_published_article_list_cubit.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../controllers/saved_articles_controller.dart';
 import '../pages/add_article/add_article_page.dart';
@@ -39,17 +39,16 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
     with TickerProviderStateMixin {
   late final TabController _tabController;
   final Map<String, Future<String>> _urlFutures = {};
+  late final GetDownloadUrlUseCase _getUrl;
 
   Future<String> _getDownloadUrlCached(String path) {
-    return _urlFutures.putIfAbsent(
-      path,
-      () => FirebaseStorage.instance.ref(path).getDownloadURL(),
-    );
+    return _urlFutures.putIfAbsent(path, () => _getUrl(path));
   }
 
   @override
   void initState() {
     super.initState();
+    _getUrl = sl<GetDownloadUrlUseCase>();
     _tabController = TabController(
       length: 3,
       vsync: this,
@@ -93,7 +92,8 @@ class _MyArticlesSectionState extends State<MyArticlesSection>
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final me = sl<GetCurrentUserUseCase>()();
+    final uid = me?.uid;
     if (uid == null) {
       return const Center(child: Text('No has iniciado sesión'));
     }
